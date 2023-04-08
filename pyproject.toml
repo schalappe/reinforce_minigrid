@@ -1,3 +1,18 @@
+[tool.poetry]
+name = "reinforce-minigrid"
+version = "0.1.0"
+description = "Explore reinforcement learning with minigrid"
+authors = ["Kone Abdallah Hakim"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "reinforce_minigrid"}]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.11"
+tensorflow-macos = "^2.12.0"
+tensorflow-metal = "^0.8.0"
+minigrid = "2.2.1"
+
 [tool.black]
 line-length = 119
 target-version = ['py310']
@@ -23,3 +38,8 @@ profile = "black"
 [tool.pylint.messages_control]
 max-line-length = 119
 disable = ["E0401", "E0611", "W0613", "R0903"]
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
