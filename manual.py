@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
     # ##: Parser.
     parser = argparse.ArgumentParser()
-    parser.add_argument("--environment", help="Name of the environment to run", default="MiniGrid-RedBlueDoors-6x6-v0")
+    parser.add_argument("--environment", help="Name of the environment to run", default="BabyAI-GoToRedBallNoDists-v0")
     parser.add_argument(
         "--action",
         action="store_true",
