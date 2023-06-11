@@ -5,7 +5,7 @@ description = "Explore reinforcement learning with minigrid"
 authors = ["Kone Abdallah Hakim"]
 license = "MIT"
 readme = "README.md"
-packages = [{include = "reinforce_minigrid"}]
+packages = [{include = "maze"}]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.11"

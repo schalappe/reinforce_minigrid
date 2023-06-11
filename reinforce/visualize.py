@@ -20,7 +20,9 @@ def render_episode(env: MazeGame, model: tf.keras.Model, max_steps: int = 100) -
         action_probs, _ = model(state)
         action = np.argmax(np.squeeze(action_probs))
 
-        state, _, done = env.step(action)
+        state, reward, done = env.step(action)
+        print(reward)
+        print(action)
         state = tf.constant(state, dtype=tf.float32)
         images.append(Image.fromarray(state.numpy().astype(np.uint8)))
 
@@ -35,9 +37,9 @@ if __name__ == "__main__":
 
     # ##: Necessary.
     game = MazeGame()
-    a2c_model = tf.keras.models.load_model(join(dirname(dirname(abspath(__file__))), "zoo", "a2c_model_1686462486"))
+    a2c_model = tf.keras.models.load_model(join(dirname(dirname(abspath(__file__))), "zoo", "a2c_model_1686509058"))
 
     # ##: Save GIF image.
     all_images = render_episode(game, a2c_model)
-    image_file = join(dirname(dirname(abspath(__file__))), "zoo", "BabyAI-GoToObjMaze-v0.tif")
+    image_file = join(dirname(dirname(abspath(__file__))), "zoo", "Maze-v0.gif")
     all_images[0].save(image_file, save_all=True, append_images=all_images[1:], loop=0, duration=1)

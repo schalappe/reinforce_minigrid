@@ -40,7 +40,7 @@ class TrainA2CModel:
 
     def __init__(self, model_config: A2CModelConfig, episode_config: EpisodeConfig):
         self.game = MazeGame()
-        self.model = A2CModel(action_space=self.game.environment.action_space.n)
+        self.model = A2CModel(action_space=3)
         self.episodes = episode_config.max_episode
         self.steps = episode_config.steps_per_episode
         self.gamma = model_config.gamma

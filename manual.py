@@ -34,12 +34,11 @@ def show_helper():
 if __name__ == "__main__":
     import argparse
 
-    import gymnasium as gym
+    from maze.envs import Maze
     from minigrid.manual_control import ManualControl
 
     # ##: Parser.
     parser = argparse.ArgumentParser()
-    parser.add_argument("--environment", help="Name of the environment to run", default="BabyAI-GoToObjMaze-v0")
     parser.add_argument(
         "--action",
         action="store_true",
@@ -52,7 +51,7 @@ if __name__ == "__main__":
         show_helper()
     else:
         # ##: Load environment.
-        mini_grid = gym.make(args.environment, render_mode="human")
+        mini_grid = Maze(render_mode="human")
 
         # ##: Play MiniGrid.
         manual_control = ManualControl(env=mini_grid, seed=random.seed())

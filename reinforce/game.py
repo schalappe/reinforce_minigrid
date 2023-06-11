@@ -6,10 +6,10 @@ import os
 from random import seed
 from typing import List, Tuple
 
-import gymnasium as gym
 import numpy as np
 import tensorflow as tf
 from minigrid.wrappers import FullyObsWrapper, RGBImgObsWrapper
+from maze.envs import Maze
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -17,8 +17,8 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 class MazeGame:
     """The Maze environment."""
 
-    def __init__(self, stage: str = "BabyAI-GoToObjMaze-v0"):
-        self.environment = RGBImgObsWrapper(FullyObsWrapper(gym.make(stage)))
+    def __init__(self):
+        self.environment = RGBImgObsWrapper(FullyObsWrapper(Maze()))
 
     def reset(self) -> np.ndarray:
         """
@@ -29,7 +29,12 @@ class MazeGame:
         ndarray
             Initial state of environment
         """
-        obs, _ = self.environment.reset(seed=seed())
+        obs = {}
+        reachable = False
+        while not reachable:
+            # obs, _ = self.environment.reset(seed=seed())
+            obs, _ = self.environment.reset(seed=1335)
+            reachable = self.environment.check_objs_reachable(raise_exc=False)
         return obs["image"].astype(np.float32)
 
     def env_step(self, action: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -47,10 +52,10 @@ class MazeGame:
             Next step, reward, done flag
         """
 
-        state, reward, done, _, _ = self.environment.step(action)
+        state, _, done, _, _ = self.environment.step(action)
+        reward = self.environment.reward()
         return state["image"].astype(np.float32), np.array(reward, np.float32), np.array(done, np.int32)
 
-    # @tf.function(reduce_retracing=True)
     def step(self, action: tf.Tensor) -> List[tf.Tensor]:
         """
         Returns state, reward and done flag given an action.
