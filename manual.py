@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Script to try MiniGrid."""
+import random
+
 from rich.console import Console
 from rich.table import Table
 
@@ -37,7 +39,7 @@ if __name__ == "__main__":
 
     # ##: Parser.
     parser = argparse.ArgumentParser()
-    parser.add_argument("--environment", help="Name of the environment to run", default="BabyAI-GoToRedBallNoDists-v0")
+    parser.add_argument("--environment", help="Name of the environment to run", default="BabyAI-GoToObjMaze-v0")
     parser.add_argument(
         "--action",
         action="store_true",
@@ -53,5 +55,5 @@ if __name__ == "__main__":
         mini_grid = gym.make(args.environment, render_mode="human")
 
         # ##: Play MiniGrid.
-        manual_control = ManualControl(env=mini_grid, seed=1335)
+        manual_control = ManualControl(env=mini_grid, seed=random.seed())
         manual_control.start()
