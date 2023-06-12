@@ -36,7 +36,7 @@ class A2CModel(keras.Model):
         self.actor = keras.Sequential(
             [
                 keras.layers.Dense(64),
-                keras.layers.Activation("tanh"),
+                keras.layers.Activation("relu"),
                 keras.layers.GlobalAveragePooling2D(),
                 keras.layers.Dense(action_space),
             ]
@@ -46,7 +46,7 @@ class A2CModel(keras.Model):
         self.critic = keras.Sequential(
             [
                 keras.layers.Dense(64),
-                keras.layers.Activation("tanh"),
+                keras.layers.Activation("relu"),
                 keras.layers.GlobalAveragePooling2D(),
                 keras.layers.Dense(1),
             ]

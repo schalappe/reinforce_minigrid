@@ -11,7 +11,7 @@ class Maze(RoomGridLevel):
 
     def __init__(self, **kwargs):
         self.num_dists = 1
-        self.doors_open = True
+        self.doors_open = False
         self.instrs = ""
         self.visited: Dict = {}
         self.distance = None

@@ -1,5 +1,5 @@
 episode:
-  max_episode: 1000
+  max_episode: 10000
   steps_per_episode: 50
 
 model:
