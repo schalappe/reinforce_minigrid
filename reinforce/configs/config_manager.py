@@ -13,7 +13,6 @@ from reinforce.configs.schemas.agent_schema import validate_agent_config
 from reinforce.configs.schemas.trainer_schema import validate_trainer_config
 
 
-
 class ConfigManager:
     """
     Configuration manager for the reinforcement learning framework.

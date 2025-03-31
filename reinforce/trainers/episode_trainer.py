@@ -17,7 +17,6 @@ from reinforce.core.base_environment import BaseEnvironment
 from reinforce.core.base_trainer import BaseTrainer
 
 
-
 class EpisodeTrainer(BaseTrainer):
     """
     Episode-based trainer for reinforcement learning agents.

@@ -13,7 +13,6 @@ from reinforce.environments import MazeEnvironment
 from reinforce.trainers.episode_trainer import EpisodeTrainer
 
 
-
 class ExperimentRunner:
     """
     Runner for reinforcement learning experiments.
