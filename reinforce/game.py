@@ -3,12 +3,11 @@
 Environment that implements the rule of 2048.
 """
 import os
-from random import seed
 from typing import List, Tuple
 
 import numpy as np
 import tensorflow as tf
-from minigrid.wrappers import FullyObsWrapper, RGBImgObsWrapper
+from minigrid.wrappers import RGBImgObsWrapper
 from maze.envs import Maze
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
@@ -18,7 +17,7 @@ class MazeGame:
     """The Maze environment."""
 
     def __init__(self):
-        self.environment = RGBImgObsWrapper(FullyObsWrapper(Maze()))
+        self.environment = RGBImgObsWrapper(Maze())
 
     def reset(self) -> np.ndarray:
         """
@@ -27,14 +26,13 @@ class MazeGame:
         Returns
         -------
         ndarray
-            Initial state of environment
+            Initial state of environments
         """
         obs = {}
         reachable = False
         while not reachable:
-            # obs, _ = self.environment.reset(seed=seed())
             obs, _ = self.environment.reset(seed=1335)
-            reachable = self.environment.check_objs_reachable(raise_exc=False)
+            reachable = self.environment.env.check_objs_reachable(raise_exc=False)
         return obs["image"].astype(np.float32)
 
     def env_step(self, action: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -53,7 +51,7 @@ class MazeGame:
         """
 
         state, _, done, _, _ = self.environment.step(action)
-        reward = self.environment.reward()
+        reward = self.environment.env.reward()
         return state["image"].astype(np.float32), np.array(reward, np.float32), np.array(done, np.int32)
 
     def step(self, action: tf.Tensor) -> List[tf.Tensor]:
