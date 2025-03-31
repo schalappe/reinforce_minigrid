@@ -11,7 +11,7 @@ import tensorflow as tf
 from keras import models, optimizers
 from numpy import ndarray
 
-from reinforce.agents.a2c.model import A2CModel
+from reinforce.agents.a2c.a2c_model import A2CModel
 from reinforce.core.base_agent import BaseAgent
 from reinforce.utils.preprocessing import preprocess_observation
 
