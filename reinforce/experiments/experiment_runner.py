@@ -3,16 +3,15 @@
 Experiment runner for reinforcement learning experiments.
 """
 
-import os
 from argparse import ArgumentParser
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, Optional, Union
 
 from reinforce.agents.a2c import A2CAgent
 from reinforce.configs import ConfigManager
 from reinforce.environments import MazeEnvironment
 from reinforce.trainers.episode_trainer import EpisodeTrainer
 
-# ##: TODO: Use pathlib for path manipulations.
 
 
 class ExperimentRunner:
@@ -33,13 +32,13 @@ class ExperimentRunner:
         """
         self.config_manager = ConfigManager(config_dir)
 
-    def run_experiment(self, experiment_config_path: str) -> Dict[str, Any]:
+    def run_experiment(self, experiment_config_path: Union[str, Path]) -> Dict[str, Any]:
         """
         Run an experiment.
 
         Parameters
         ----------
-        experiment_config_path : str
+        experiment_config_path : str | Path
             Path to the experiment configuration file.
 
         Returns
@@ -48,7 +47,7 @@ class ExperimentRunner:
             Dictionary of experiment results.
         """
         # ##: Load experiment configuration.
-        config = self.config_manager.load_experiment_config(experiment_config_path)
+        config = self.config_manager.load_experiment_config(str(experiment_config_path))
 
         # ##: Set up the environment, agent, and trainer.
         environment = self._create_environment(config.get("environment", {}))
@@ -60,13 +59,13 @@ class ExperimentRunner:
 
         # ##: Save results if specified.
         if "save_results" in config and config["save_results"]:
-            results_dir = config.get("results_dir", "outputs/results")
-            os.makedirs(results_dir, exist_ok=True)
+            results_dir = Path(config.get("results_dir", "outputs/results"))
+            results_dir.mkdir(parents=True, exist_ok=True)
 
-            experiment_name = os.path.splitext(os.path.basename(experiment_config_path))[0]
-            results_path = os.path.join(results_dir, f"{experiment_name}_results.json")
+            experiment_name = Path(experiment_config_path).stem
+            results_path = results_dir / f"{experiment_name}_results.json"
 
-            self.config_manager.save_config(results, results_path)
+            self.config_manager.save_config(results, str(results_path))
 
         return results
 

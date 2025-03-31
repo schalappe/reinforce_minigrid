@@ -3,12 +3,12 @@
 Episode-based trainer for reinforcement learning agents.
 """
 
-import os
 import time
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 from statistics import mean
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
 
@@ -16,7 +16,6 @@ from reinforce.core.base_agent import BaseAgent
 from reinforce.core.base_environment import BaseEnvironment
 from reinforce.core.base_trainer import BaseTrainer
 
-# ##: TODO: Use pathlib for path management.
 
 
 class EpisodeTrainer(BaseTrainer):
@@ -61,10 +60,10 @@ class EpisodeTrainer(BaseTrainer):
         self.gamma = config.get("gamma", 0.99)
         self.log_frequency = config.get("log_frequency", 1)
         self.save_frequency = config.get("save_frequency", 100)
-        self.save_dir = config.get("save_dir", os.path.join("outputs", "models"))
+        self.save_dir = Path(config.get("save_dir", Path("outputs") / "models"))
 
         # ##: Ensure the save directory exists.
-        os.makedirs(self.save_dir, exist_ok=True)
+        self.save_dir.mkdir(parents=True, exist_ok=True)
 
         # ##: Initialize training state.
         self.episode = 0
@@ -151,12 +150,10 @@ class EpisodeTrainer(BaseTrainer):
                     f"(min: {eval_rewards['min_reward']:.2f}, max: {eval_rewards['max_reward']:.2f})"
                 )
 
-            # ##: Save the agent.
+            # £##: Save the agent.
             if (self.episode + 1) % self.save_frequency == 0:
                 self.save_checkpoint(
-                    os.path.join(
-                        self.save_dir, f"{self.agent.name}_{self.environment.name}_{self.timestamp}_{self.episode + 1}"
-                    )
+                    self.save_dir / f"{self.agent.name}_{self.environment.name}_{self.timestamp}_{self.episode + 1}"
                 )
 
             # ##: Invoke callbacks.
@@ -215,44 +212,44 @@ class EpisodeTrainer(BaseTrainer):
             "rewards": eval_rewards,
         }
 
-    def save_checkpoint(self, path: str) -> None:
+    def save_checkpoint(self, path: Union[str, Path]) -> None:
         """
         Save the training state to the specified path.
 
         Parameters
         ----------
-        path : str
+        path : str | Path
             Directory path to save the training state.
         """
         # ##: Create directory if it doesn't exist.
-        os.makedirs(path, exist_ok=True)
+        path_obj = Path(path)
+        path_obj.mkdir(parents=True, exist_ok=True)
 
         # ##: Save the agent.
-        self.agent.save(os.path.join(path, "agent"))
+        self.agent.save(str(path_obj / "agent"))
 
         # ##: Save trainer state.
-        np.save(
-            os.path.join(path, "trainer_state.npy"),
-            {
-                "episode": self.episode,
-                "total_steps": self.total_steps,
-                "timestamp": self.timestamp,
-            },
-        )
+        trainer_state = {
+            "episode": self.episode,
+            "total_steps": self.total_steps,
+            "timestamp": self.timestamp,
+        }
+        np.save(path_obj / "trainer_state.npy", np.array([trainer_state], dtype=object))
 
-    def load_checkpoint(self, path: str) -> None:
+    def load_checkpoint(self, path: Union[str, Path]) -> None:
         """
         Load the training state from the specified path.
 
         Parameters
         ----------
-        path : str
+        path : str or Path
             Directory path to load the training state from.
         """
-        self.agent.load(os.path.join(path, "agent"))
+        path_obj = Path(path)
+        self.agent.load(str(path_obj / "agent"))
 
         # ##: Load trainer state.
-        trainer_state = np.load(os.path.join(path, "trainer_state.npy"), allow_pickle=True).item()
+        trainer_state = np.load(path_obj / "trainer_state.npy", allow_pickle=True).item()
         self.episode = trainer_state["episode"]
         self.total_steps = trainer_state["total_steps"]
         self.timestamp = trainer_state["timestamp"]

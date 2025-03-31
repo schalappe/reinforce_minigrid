@@ -6,13 +6,12 @@ Hyperparameter search for reinforcement learning experiments.
 import argparse
 import itertools
 import json
-import os
-from typing import Any, Dict, Iterator, List, Optional
+from pathlib import Path
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 from reinforce.configs import ConfigManager
 from reinforce.experiments.experiment_runner import ExperimentRunner
 
-# ##: TODO: Use pathlib for path manipulations.
 # ##: TODO: Use optuna for hyperparameter search.
 
 
@@ -34,16 +33,16 @@ class HyperparameterSearch:
         """
         self.config_manager = ConfigManager(config_dir)
         self.experiment_runner = ExperimentRunner(config_dir)
-        self.results_dir = "outputs/hyperparameter_search"
-        os.makedirs(self.results_dir, exist_ok=True)
+        self.results_dir = Path("outputs/hyperparameter_search")
+        self.results_dir.mkdir(parents=True, exist_ok=True)
 
-    def run_search(self, search_config_path: str) -> Dict[str, Any]:
+    def run_search(self, search_config_path: Union[str, Path]) -> Dict[str, Any]:
         """
         Run a hyperparameter search.
 
         Parameters
         ----------
-        search_config_path : str
+        search_config_path : str | Path
             Path to the search configuration file.
 
         Returns
@@ -51,21 +50,21 @@ class HyperparameterSearch:
         Dict[str, Any]
             Dictionary of search results.
         """
-        search_config = self.config_manager.load_config(search_config_path)
+        search_config = self.config_manager.load_config(str(search_config_path))
 
         param_grid = self._generate_param_grid(search_config["hyperparameters"])
 
         base_config = search_config["base_config"]
         if isinstance(base_config, str):
-            base_config = self.config_manager.load_config(base_config)
+            base_config = self.config_manager.load_config(str(base_config))
 
         results = []
         for params in param_grid:
             experiment_config = self._create_experiment_config(base_config, params)
 
             experiment_id = self._get_experiment_id(params)
-            config_path = os.path.join(self.results_dir, f"{experiment_id}_config.yaml")
-            self.config_manager.save_config(experiment_config, config_path)
+            config_path = self.results_dir / f"{experiment_id}_config.yaml"
+            self.config_manager.save_config(experiment_config, str(config_path))
 
             print(f"Running experiment {experiment_id}...")
             experiment_results = self.experiment_runner.run_experiment(config_path)
@@ -73,8 +72,8 @@ class HyperparameterSearch:
             experiment_results["hyperparameters"] = params
 
             results.append(experiment_results)
-            results_path = os.path.join(self.results_dir, f"{experiment_id}_results.json")
-            self.config_manager.save_config(experiment_results, results_path)
+            results_path = self.results_dir / f"{experiment_id}_results.json"
+            self.config_manager.save_config(experiment_results, str(results_path))
 
         best_result = max(results, key=lambda r: r.get("mean_reward", 0))
 
@@ -93,9 +92,9 @@ class HyperparameterSearch:
             ],
         }
 
-        search_name = os.path.splitext(os.path.basename(search_config_path))[0]
-        summary_path = os.path.join(self.results_dir, f"{search_name}_summary.json")
-        self.config_manager.save_config(summary, summary_path)
+        search_name = Path(search_config_path).stem
+        summary_path = self.results_dir / f"{search_name}_summary.json"
+        self.config_manager.save_config(summary, str(summary_path))
 
         print("Hyperparameter search complete!")
         print(f"Number of experiments: {summary['num_experiments']}")

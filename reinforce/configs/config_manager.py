@@ -4,7 +4,7 @@ Configuration management for the reinforcement learning framework.
 """
 
 import json
-import os
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
@@ -12,7 +12,6 @@ import yaml
 from reinforce.configs.schemas.agent_schema import validate_agent_config
 from reinforce.configs.schemas.trainer_schema import validate_trainer_config
 
-# ##: TODO: Use pathlib for path management.
 
 
 class ConfigManager:
@@ -31,7 +30,7 @@ class ConfigManager:
         config_dir : str, optional
             Directory containing configuration files
         """
-        self.config_dir = config_dir or os.path.join(os.path.dirname(__file__), "default_configs")
+        self.config_dir = Path(config_dir) if config_dir else Path(__file__).parent / "default_configs"
 
     @staticmethod
     def load_config(path: str) -> Dict[str, Any]:
@@ -40,7 +39,7 @@ class ConfigManager:
 
         Parameters
         ----------
-        path : str
+        path : str | Path
             Path to the configuration file.
 
         Returns
@@ -55,16 +54,17 @@ class ConfigManager:
         ValueError
             If the file format is not supported.
         """
-        if not os.path.exists(path):
+        path_obj = Path(path)
+        if not path_obj.exists():
             raise FileNotFoundError(f"Configuration file not found: {path}")
 
-        file_ext = os.path.splitext(path)[1].lower()
+        file_ext = path_obj.suffix.lower()
 
         if file_ext in (".yaml", ".yml"):
-            with open(path, "r") as f:
+            with path_obj.open("r") as f:
                 config = yaml.safe_load(f)
         elif file_ext == ".json":
-            with open(path, "r") as f:
+            with path_obj.open("r") as f:
                 config = json.load(f)
         else:
             raise ValueError(f"Unsupported file format: {file_ext}")
@@ -80,7 +80,7 @@ class ConfigManager:
         ----------
         config : Dict[str, Any]
             Configuration dictionary.
-        path : str
+        path : str | Path
             Path to save the configuration to.
 
         Raises
@@ -88,16 +88,17 @@ class ConfigManager:
         ValueError
             If the file format is not supported.
         """
-        file_ext = os.path.splitext(path)[1].lower()
+        path_obj = Path(path)
+        file_ext = path_obj.suffix.lower()
 
         # ##: Create directory if it doesn't exist.
-        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        path_obj.parent.mkdir(parents=True, exist_ok=True)
 
         if file_ext in (".yaml", ".yml"):
-            with open(path, "w") as f:
+            with path_obj.open("w") as f:
                 yaml.dump(config, f, default_flow_style=False)
         elif file_ext == ".json":
-            with open(path, "w") as f:
+            with path_obj.open("w") as f:
                 json.dump(config, f, indent=2)
         else:
             raise ValueError(f"Unsupported file format: {file_ext}")
@@ -157,12 +158,12 @@ class ConfigManager:
         FileNotFoundError
             If the default configuration is not found.
         """
-        config_path = os.path.join(self.config_dir, config_type, f"{name}.yaml")
+        config_path = self.config_dir / config_type / f"{name}.yaml"
 
-        if not os.path.exists(config_path):
+        if not config_path.exists():
             raise FileNotFoundError(f"Default configuration not found: {config_path}")
 
-        return self.load_config(config_path)
+        return self.load_config(str(config_path))
 
     def merge_configs(self, base_config: Dict[str, Any], override_config: Dict[str, Any]) -> Dict[str, Any]:
         """
