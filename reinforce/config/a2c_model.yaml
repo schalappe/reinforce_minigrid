@@ -1,7 +1,0 @@
-episode:
-  max_episode: 10000
-  steps_per_episode: 50
-
-model:
-  gamma: 0.99
-  learning_rate: 0.001

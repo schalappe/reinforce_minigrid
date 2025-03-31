@@ -1,0 +1,8 @@
+# Default configuration for A2C agent
+agent_type: A2C
+action_space: 7   # Number of actions in MiniGrid Maze
+embedding_size: 128
+learning_rate: 0.001
+discount_factor: 0.99
+entropy_coef: 0.01
+value_coef: 0.5
