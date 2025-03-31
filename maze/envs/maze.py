@@ -75,15 +75,29 @@ class Maze(RoomGridLevel):
         """
         self.visited[self.agent_pos] = self.visited.get(self.agent_pos, 0) + 1
 
-        # ##: Add position and compute distance.
-        power = self.visited.get(self.agent_pos)
+        # ##: Calculate Manhattan distance to goal.
         distance = abs(self.goal_position[1] - self.agent_pos[1]) + abs(self.goal_position[0] - self.agent_pos[0])
 
-        # ##: Punish agent or not.
-        good_direction = self.distance > distance
-        self.distance = distance
-        reward = (1 / distance) ** power if good_direction else 0
+        # ##: Check if reached goal.
+        if distance == 0:
+            return 10.0  # ##: High positive reward for reaching the goal.
 
+        # ##: Get previous distance to calculate progress.
+        previous_distance = self.distance if self.distance is not None else distance
+        self.distance = distance
+
+        # ##: Calculate progress reward: positive for getting closer, negative for moving away.
+        progress_reward = (previous_distance - distance) * 0.1
+
+        # ##: Small penalty for revisiting states (scales more gently than exponential).
+        visit_count = self.visited.get(self.agent_pos)
+        exploration_penalty = -0.01 * min(visit_count - 1, 10)  # ##: Cap the penalty.
+
+        # ##: Small step penalty to encourage shortest paths.
+        step_penalty = -0.01
+
+        # ##: Calculate final reward.
+        reward = progress_reward + exploration_penalty + step_penalty
         return reward
     
     def step(self, action: object) -> Tuple[object, SupportsFloat, bool, bool, dict[str, Any]]:
