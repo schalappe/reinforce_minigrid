@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Register environment."""
+
 from gymnasium.envs.registration import register
 
 register(
