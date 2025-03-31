@@ -50,8 +50,7 @@ class MazeGame:
             Next step, reward, done flag
         """
 
-        state, _, done, _, _ = self.environment.step(action)
-        reward = self.environment.env.reward()
+        state, reward, done, _, _ = self.environment.step(action)
         return state["image"].astype(np.float32), np.array(reward, np.float32), np.array(done, np.int32)
 
     def step(self, action: tf.Tensor) -> List[tf.Tensor]:

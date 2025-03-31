@@ -6,7 +6,7 @@ This module implements a simple maze navigation task where the agent needs to fi
 green ball goal. The environment uses the ``MiniGrid`` framework and inherits from ``RoomGridLevel``.
 """
 
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Any, SupportsFloat
 
 from minigrid.core.world_object import WorldObj
 from minigrid.envs.babyai.core.roomgrid_level import RoomGridLevel
@@ -85,6 +85,35 @@ class Maze(RoomGridLevel):
         reward = (1 / distance) ** power if good_direction else 0
 
         return reward
+    
+    def step(self, action: object) -> Tuple[object, SupportsFloat, bool, bool, dict[str, Any]]:
+        """
+        Take a step in the environment.
+        
+        This method overrides the parent class's step method to calculate rewards using the
+        environment's reward function.
+        
+        Parameters
+        ----------
+        action : object
+            The action to take in the current state.
+            
+        Returns
+        -------
+        obs : object
+            An observation from the environment after taking the action.
+        reward : SupportsFloat
+            The reward value calculated by the environment's reward function.
+        terminated : bool
+            Whether the episode has terminated.
+        truncated : bool
+            Whether the episode was truncated.
+        info : dict[str, Any]
+            Additional information about the environment state.
+        """
+        obs, _, terminated, truncated, info = super().step(action)
+        reward = self.reward()
+        return obs, reward, terminated, truncated, info
 
     def add_goal(self) -> WorldObj:
         """
