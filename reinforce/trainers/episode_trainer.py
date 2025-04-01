@@ -61,6 +61,10 @@ class EpisodeTrainer(BaseTrainer):
         self.save_frequency = config.get("save_frequency", 100)
         self.save_dir = Path(config.get("save_dir", Path("outputs") / "models"))
 
+        # ##: Optuna trial information for pruning.
+        self._trial_info = config.get("_trial_info", None)
+        self._pruning_callback = config.get("_pruning_callback", None)
+
         # ##: Ensure the save directory exists.
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -144,12 +148,29 @@ class EpisodeTrainer(BaseTrainer):
             # ##: Evaluate the agent.
             if (self.episode + 1) % self.eval_frequency == 0:
                 eval_rewards = self.evaluate(self.num_eval_episodes)
+                mean_reward = eval_rewards["mean_reward"]
+
                 print(
-                    f"Evaluation reward: {eval_rewards['mean_reward']:.2f} "
+                    f"Evaluation reward: {mean_reward:.2f} "
                     f"(min: {eval_rewards['min_reward']:.2f}, max: {eval_rewards['max_reward']:.2f})"
                 )
 
-            # £##: Save the agent.
+                # ##: Report to Optuna for pruning if this is a trial.
+                if self._pruning_callback is not None and self._trial_info is not None:
+                    try:
+                        self._pruning_callback(self.episode + 1, mean_reward)
+                    except Exception as e:
+                        print(f"Trial pruned at episode {self.episode + 1}: {e}")
+                        # Return current results if pruned
+                        return {
+                            "pruned": True,
+                            "episodes": self.episode + 1,
+                            "total_steps": self.total_steps,
+                            "mean_reward": mean(self.episode_rewards) if self.episode_rewards else 0,
+                            "max_reward": max(self.episode_rewards) if self.episode_rewards else 0,
+                        }
+
+            # ##: Save the agent.
             if (self.episode + 1) % self.save_frequency == 0:
                 self.save_checkpoint(
                     self.save_dir / f"{self.agent.name}_{self.environment.name}_{self.timestamp}_{self.episode + 1}"

@@ -5,7 +5,7 @@ Experiment runner for reinforcement learning experiments.
 
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Callable, Dict, Optional, Union
 
 from reinforce.agents.a2c import A2CAgent
 from reinforce.configs import ConfigManager
@@ -31,7 +31,9 @@ class ExperimentRunner:
         """
         self.config_manager = ConfigManager(config_dir)
 
-    def run_experiment(self, experiment_config_path: Union[str, Path]) -> Dict[str, Any]:
+    def run_experiment(
+        self, experiment_config_path: Union[str, Path], pruning_callback: Optional[Callable[[int, float], None]] = None
+    ) -> Dict[str, Any]:
         """
         Run an experiment.
 
@@ -39,6 +41,8 @@ class ExperimentRunner:
         ----------
         experiment_config_path : str | Path
             Path to the experiment configuration file.
+        pruning_callback : callable, optional
+            Callback function for Optuna pruning. Takes (step, value) parameters.
 
         Returns
         -------
@@ -48,10 +52,20 @@ class ExperimentRunner:
         # ##: Load experiment configuration.
         config = self.config_manager.load_experiment_config(str(experiment_config_path))
 
+        # ##: Check if this is an Optuna trial.
+        trial_info = config.get("_trial_info", None)
+
         # ##: Set up the environment, agent, and trainer.
         environment = self._create_environment(config.get("environment", {}))
         agent = self._create_agent(config.get("agent", {}), environment)
-        trainer = self._create_trainer(config.get("trainer", {}), agent, environment)
+
+        # ## Add pruning support to trainer config if needed.
+        trainer_config = config.get("trainer", {}).copy()
+        if trial_info is not None:
+            trainer_config["_trial_info"] = trial_info
+            trainer_config["_pruning_callback"] = pruning_callback
+
+        trainer = self._create_trainer(trainer_config, agent, environment)
 
         # ##: Run the experiment.
         results = trainer.train()

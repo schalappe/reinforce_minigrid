@@ -1,0 +1,45 @@
+base_config:
+  agent:
+    action_space: 7
+    agent_type: A2C
+    discount_factor: 0.99
+    embedding_size: 128
+    entropy_coef: 0.01
+    learning_rate: 0.001
+    value_coef: 0.5
+  environment:
+    use_image_obs: true
+  results_dir: outputs/results
+  save_results: true
+  trainer:
+    eval_frequency: 100
+    gamma: 0.99
+    log_frequency: 100
+    max_episodes: 500
+    max_steps_per_episode: 100
+    num_eval_episodes: 5
+    save_dir: outputs/models
+    save_frequency: 500
+    trainer_type: EpisodeTrainer
+    update_frequency: 1
+hyperparameters:
+  agent.discount_factor:
+    type: categorical
+    values:
+    - 0.9
+    - 0.95
+    - 0.99
+  agent.embedding_size:
+    high: 256
+    low: 64
+    type: int
+  agent.entropy_coef:
+    high: 0.1
+    log_scale: true
+    low: 0.001
+    type: float
+  agent.learning_rate:
+    high: 0.01
+    log_scale: true
+    low: 0.0001
+    type: float
