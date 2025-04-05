@@ -7,12 +7,13 @@ learning experiments. It handles configuration loading, environment setup, agent
 training, and logging (via AIM).
 """
 
+import sys
 from argparse import ArgumentParser
 from logging import getLogger
 from pathlib import Path
 from time import time
 from traceback import format_exc
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from reinforce.agents import A2CAgent
 from reinforce.configs import ConfigManager
@@ -47,6 +48,49 @@ class ExperimentRunner:
             Directory containing configuration files. If None, defaults to built-in configurations.
         """
         self.config_manager = ConfigManager(config_dir)
+
+    def _setup_experiment(
+        self,
+        experiment_config_path: Union[str, Path],
+        pruning_callback: Optional[Callable[[int, float], None]] = None,
+        aim_tags: Optional[List[str]] = None,
+    ) -> Tuple[Dict[str, Any], EpisodeTrainer, Optional[AimLogger]]:
+        """Helper method to set up the experiment components."""
+        config = self.config_manager.load_experiment_config(str(experiment_config_path))
+        experiment_name = Path(experiment_config_path).stem
+
+        # ##: Initialize AIM Logger.
+        base_tags = ["reinforce", config.get("agent", {}).get("agent_type", "unknown_agent")]
+        if aim_tags:
+            base_tags.extend(aim_tags)
+
+        aim_logger = AimLogger(
+            experiment_name=config.get("aim_experiment_name", experiment_name), tags=list(set(base_tags))
+        )
+
+        if not aim_logger.run:
+            logger.info("Failed to initialize AIM logger. Proceeding without AIM tracking.")
+        else:
+            aim_logger.log_params(config, prefix="experiment_config")
+            aim_logger.log_params(config.get("agent", {}), prefix="agent_config")
+            aim_logger.log_params(config.get("environment", {}), prefix="env_config")
+
+        # ##: Check if this is an Optuna trial.
+        trial_info = config.get("_trial_info", None)
+
+        # ##: Set up the environment, agent, and trainer.
+        environment = self._create_environment(config.get("environment", {}))
+        agent = self._create_agent(config.get("agent", {}), environment)
+
+        # ## Add pruning support to trainer config if needed.
+        trainer_config = config.get("trainer", {}).copy()
+        if trial_info is not None:
+            trainer_config["_trial_info"] = trial_info
+            trainer_config["_pruning_callback"] = pruning_callback
+
+        trainer = self._create_trainer(trainer_config, agent, environment, aim_logger)
+
+        return config, trainer, aim_logger
 
     def run_experiment(
         self,
@@ -84,40 +128,8 @@ class ExperimentRunner:
         aim_logger = None
 
         try:
-            # ##: Load experiment configuration.
-            config = self.config_manager.load_experiment_config(str(experiment_config_path))
-            experiment_name = Path(experiment_config_path).stem
-
-            # ##: Initialize AIM Logger.
-            base_tags = ["reinforce", config.get("agent", {}).get("agent_type", "unknown_agent")]
-            if aim_tags:
-                base_tags.extend(aim_tags)
-
-            aim_logger = AimLogger(
-                experiment_name=config.get("aim_experiment_name", experiment_name), tags=list(set(base_tags))
-            )
-
-            if not aim_logger.run:
-                logger.info("Failed to initialize AIM logger. Proceeding without AIM tracking.")
-            else:
-                aim_logger.log_params(config, prefix="experiment_config")
-                aim_logger.log_params(config.get("agent", {}), prefix="agent_config")
-                aim_logger.log_params(config.get("environment", {}), prefix="env_config")
-
-            # ##: Check if this is an Optuna trial.
-            trial_info = config.get("_trial_info", None)
-
-            # ##: Set up the environment, agent, and trainer.
-            environment = self._create_environment(config.get("environment", {}))
-            agent = self._create_agent(config.get("agent", {}), environment)
-
-            # ## Add pruning support to trainer config if needed.
-            trainer_config = config.get("trainer", {}).copy()
-            if trial_info is not None:
-                trainer_config["_trial_info"] = trial_info
-                trainer_config["_pruning_callback"] = pruning_callback
-
-            trainer = self._create_trainer(trainer_config, agent, environment, aim_logger)
+            # ##: Setup experiment components using the helper method.
+            config, trainer, aim_logger = self._setup_experiment(experiment_config_path, pruning_callback, aim_tags)
 
             # ##: Run the training.
             results = trainer.train()
@@ -146,12 +158,8 @@ class ExperimentRunner:
             logger.error("An error occurred during the experiment: %s", exc)
             if aim_logger and aim_logger.run:
                 aim_logger.log_text(f"Experiment failed: {exc}\n{format_exc()}", name="error_log")
-            raise
-
-        finally:
-            # ##: Ensure AIM run is closed.
-            if aim_logger:
                 aim_logger.close()
+            sys.exit(1)
 
     @staticmethod
     def _create_environment(env_config: Dict[str, Any]) -> MazeEnvironment:
@@ -201,6 +209,7 @@ class ExperimentRunner:
 
         if agent_type == "A2C":
             action_space = agent_config.get("action_space", environment.action_space.n)
+
             # ##: Extract hyperparameters expected by A2CAgent from the config.
             hyperparams = {
                 "embedding_size": agent_config.get("embedding_size", 128),
@@ -209,7 +218,7 @@ class ExperimentRunner:
                 "entropy_coef": agent_config.get("entropy_coef", 0.01),
                 "value_coef": agent_config.get("value_coef", 0.5),
             }
-            # ##: Instantiate agent with the new signature.
+
             return A2CAgent(action_space=action_space, hyperparameters=hyperparams)
 
         raise ValueError(f"Unsupported agent type: {agent_type}")
@@ -277,12 +286,7 @@ def main():
     runner = ExperimentRunner(args.config_dir)
 
     # ##: Run the experiment with optional AIM args.
-    try:
-        results = runner.run_experiment(args.config, aim_tags=args.tags)
-    except Exception as exc:
-        logger.error("Experiment failed in main: %s", exc)
-        logger.error(format_exc())
-        exit(1)
+    results = runner.run_experiment(args.config, aim_tags=args.tags)
 
     # ##: Print summary of results.
     logger.info("Experiment complete!")
