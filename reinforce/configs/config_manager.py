@@ -60,10 +60,10 @@ class ConfigManager:
         file_ext = path_obj.suffix.lower()
 
         if file_ext in (".yaml", ".yml"):
-            with path_obj.open("r") as f:
+            with path_obj.open("r", encoding="utf-8") as f:
                 config = yaml.safe_load(f)
         elif file_ext == ".json":
-            with path_obj.open("r") as f:
+            with path_obj.open("r", encoding="utf-8") as f:
                 config = json.load(f)
         else:
             raise ValueError(f"Unsupported file format: {file_ext}")
@@ -94,10 +94,10 @@ class ConfigManager:
         path_obj.parent.mkdir(parents=True, exist_ok=True)
 
         if file_ext in (".yaml", ".yml"):
-            with path_obj.open("w") as file:
+            with path_obj.open("w", encoding="utf-8") as file:
                 yaml.dump(config, file, default_flow_style=False)
         elif file_ext == ".json":
-            with path_obj.open("w") as file:
+            with path_obj.open("w", encoding="utf-8") as file:
                 json.dump(config, file, indent=2)
         else:
             raise ValueError(f"Unsupported file format: {file_ext}")

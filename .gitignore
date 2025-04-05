@@ -147,3 +147,4 @@ cython_debug/
 # Special repositories
 zoo/
 outputs/
+.aim/
