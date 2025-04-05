@@ -44,12 +44,7 @@ class AimLogger:
     ...         aim_log.log_artifact("model_weights", name="final_model", path="models/final.pt")
     """
 
-    def __init__(
-        self,
-        experiment_name: str,
-        tags: Optional[List[str]] = None,
-        repo_path: Union[str, Path] = ".aim",
-    ):
+    def __init__(self, experiment_name: str, tags: Optional[List[str]] = None, repo_path: Union[str, Path] = ".aim"):
         """
         Initialize the AimLogger and start an AIM Run.
 
@@ -176,8 +171,8 @@ class AimLogger:
 
         Examples
         --------
-        >>> aim_log.log_params({"learning_rate": 0.01, "optimizer": "Adam"})
-        >>> aim_log.log_params({"gamma": 0.99, "lambda": 0.95}, prefix="ppo")
+        >>> AimLogger.log_params({"learning_rate": 0.01, "optimizer": "Adam"})
+        >>> AimLogger.log_params({"gamma": 0.99, "lambda": 0.95}, prefix="ppo")
         """
         if prefix:
             processed_params = {f"{prefix}.{k}": v for k, v in params.items()}
@@ -200,6 +195,7 @@ class AimLogger:
         name: str,
         value: Any,
         step: Optional[int] = None,
+        *,
         epoch: Optional[int] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> None:
@@ -221,8 +217,8 @@ class AimLogger:
 
         Examples
         --------
-        >>> aim_log.log_metric("train_loss", 0.5, step=100, context={"subset": "train"})
-        >>> aim_log.log_metric("val_accuracy", 0.95, epoch=5, context={"subset": "validation"})
+        >>> AimLogger.log_metric("train_loss", 0.5, step=100, context={"subset": "train"})
+        >>> AimLogger.log_metric("val_accuracy", 0.95, epoch=5, context={"subset": "validation"})
         """
         op_desc = f"logging metric '{name}' (Step: {step}, Epoch: {epoch})"
         self._safe_run_operation(
@@ -253,7 +249,7 @@ class AimLogger:
         Examples
         --------
         >>> metrics_dict = {"reward": 10.5, "steps_per_episode": 55}
-        >>> aim_log.log_metrics(metrics_dict, step=500, context={"env": "CartPole-v1"})
+        >>> AimLogger.log_metrics(metrics_dict, step=500, context={"env": "CartPole-v1"})
         """
         base_context = context or {}
         for name, value in metrics.items():
@@ -285,18 +281,6 @@ class AimLogger:
         Note: Aim currently doesn't have first-class artifact tracking like MLflow. This method logs
         artifact information (type, path, metadata) into a dictionary structure within the run's
         parameters under `artifacts/{name}`.
-
-        Examples
-        --------
-        >>> # Log info about a saved model
-        >>> aim_log.log_artifact(
-        ...     my_model,
-        ...     name="actor_critic_model",
-        ...     path="saved_models/ac_v1.pt",
-        ...     meta={"version": 1, "framework": "PyTorch"}
-        ... )
-        >>> # Log info about a dataset file
-        >>> aim_log.log_artifact(dataset_object, name="training_data", path="/data/processed/train.csv")
         """
         artifact_info: Dict[str, Any] = {"name": name, "type": type(artifact_data).__name__}
         if path:
@@ -314,6 +298,7 @@ class AimLogger:
         image_data: Any,
         name: str,
         step: Optional[int] = None,
+        *,
         epoch: Optional[int] = None,
         context: Optional[Dict[str, Any]] = None,
         caption: Optional[str] = None,
@@ -343,7 +328,7 @@ class AimLogger:
         --------
         >>> import numpy as np
         >>> random_image = np.random.randint(0, 256, size=(100, 100, 3), dtype=np.uint8)
-        >>> aim_log.log_image(random_image, "random_noise", step=50, caption="Random RGB noise")
+        >>> AimLogger.log_image(random_image, "random_noise", step=50, caption="Random RGB noise")
         """
         try:
             aim_image = AimImage(image_data, caption=caption)
@@ -361,6 +346,7 @@ class AimLogger:
         text_data: str,
         name: str,
         step: Optional[int] = None,
+        *,
         epoch: Optional[int] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> None:
@@ -382,7 +368,7 @@ class AimLogger:
 
         Examples
         --------
-        >>> aim_log.log_text("Episode finished after 150 steps.", "episode_log", step=150)
+        >>> AimLogger.log_text("Episode finished after 150 steps.", "episode_log", step=150)
         """
         try:
             aim_text = AimText(text_data)
