@@ -7,7 +7,6 @@ from typing import List, Union
 
 import numpy as np
 import tensorflow as tf
-from numpy import ndarray
 
 
 def frame_stack(frames: List[Union[np.ndarray, tf.Tensor]], num_frames: int = 4) -> Union[np.ndarray, tf.Tensor]:
