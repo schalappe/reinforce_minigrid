@@ -217,7 +217,7 @@ class A2CAgent(BaseAgent):
             # ##: Calculate policy loss (negative for gradient ascent).
             policy_loss = -tf.reduce_mean(selected_action_log_probs * advantages)
 
-            # ##: Calculate value loss
+            # ##: Calculate value loss.
             value_loss = self.value_coef * tf.reduce_mean(tf.square(returns - values))
 
             # ##: Calculate entropy loss (for exploration).
