@@ -5,8 +5,12 @@ Prioritized experience replay buffer for reinforcement learning agents.
 
 from typing import Dict, Tuple, Union
 
-import numpy as np
-from numpy import ndarray
+from numpy import any as np_any
+from numpy import float32
+from numpy import max as np_max
+from numpy import ndarray, ones
+from numpy import sum as np_sum
+from numpy.random import choice
 
 from reinforce.utils.buffers.base import ReplayBuffer
 
@@ -24,9 +28,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         capacity: int,
         observation_shape: Tuple[int, ...],
         action_shape: Tuple[int, ...] = (),
-        alpha: float = 0.6,
-        beta: float = 0.4,
-        epsilon: float = 1e-6,
+        prioritization_params: Dict[str, float] = None,
     ):
         """
         Initialize the prioritized replay buffer.
@@ -35,52 +37,51 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         ----------
         capacity : int
             Maximum number of experiences to store.
-        observation_shape : tuple of int
+        observation_shape : Tuple[int, ...]
             Shape of observations.
-        action_shape : tuple of int, optional
+        action_shape : Tuple[int, ...], optional
             Shape of actions, default is empty tuple.
-        alpha : float, optional
-            Prioritization exponent (0 = uniform sampling), default is 0.6.
-        beta : float, optional
-            Importance sampling exponent (1 = no correction), default is 0.4.
-        epsilon : float, optional
-            Small value to add to priorities to ensure non-zero sampling probability, default is 1e-6.
+        prioritization_params : Dict[str, float], optional
+            Dictionary containing prioritization parameters:
+            - alpha: Prioritization exponent (default: 0.6)
+            - beta: Importance sampling exponent (default: 0.4)
+            - epsilon: Small value added to priorities (default: 1e-6)
         """
         super().__init__(capacity, observation_shape, action_shape)
 
-        self.alpha = alpha
-        self.beta = beta
-        self.epsilon = epsilon
+        # ##: Default prioritization parameters.
+        default_params = {"alpha": 0.6, "beta": 0.4, "epsilon": 1e-6}
+        if prioritization_params:
+            default_params.update(prioritization_params)
+
+        self.alpha = default_params["alpha"]
+        self.beta = default_params["beta"]
+        self.epsilon = default_params["epsilon"]
 
         # ##: Initialize priorities with ones.
-        self._priorities = np.ones((capacity,), dtype=np.float32)
+        self._priorities = ones((capacity,), dtype=float32)
 
-    def add(
-        self, observation: ndarray, action: Union[int, ndarray], reward: float, next_observation: ndarray, done: bool
-    ) -> None:
+    def add(self, experience: Dict[str, Union[ndarray, int, float, bool]]) -> None:
         """
         Add an experience to the buffer with maximum priority.
 
         Parameters
         ----------
-        observation : ndarray
-            Current observation.
-        action : int or ndarray
-            Action taken.
-        reward : float
-            Reward received.
-        next_observation : ndarray
-            Next observation.
-        done : bool
-            Whether the episode is done.
+        experience : Dict[str, Union[ndarray, int, float, bool]]
+            Dictionary containing the experience tuple:
+            - observation: Current observation (ndarray)
+            - action: Action taken (int or ndarray)
+            - reward: Reward received (float)
+            - next_observation: Next observation (ndarray)
+            - done: Whether the episode is done (bool)
         """
         # ##: Set the priority of the new experience to the maximum priority
         # in the buffer, or 1 if the buffer is empty.
-        max_priority = np.max(self._priorities) if self.size > 0 else 1.0
+        max_priority = np_max(self._priorities) if self.size > 0 else 1.0
         self._priorities[self._next_idx] = max_priority
 
         # ##: Add the experience to the buffer.
-        super().add(observation, action, reward, next_observation, done)
+        super().add(experience)
 
     def sample(self, batch_size: int) -> Dict[str, ndarray]:
         """
@@ -107,24 +108,23 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
         # ##: Calculate sampling probabilities.
         priorities = self._priorities[: self.size] ** self.alpha
-        probabilities = priorities / np.sum(priorities)
+        probabilities = priorities / np_sum(priorities)
 
         # ##: Sample indices based on priorities.
-        indices = np.random.choice(self.size, size=batch_size, p=probabilities)
+        indices = choice(self.size, size=batch_size, p=probabilities)
 
         # ##: Calculate importance sampling weights.
         weights = (self.size * probabilities[indices]) ** (-self.beta)
         weights /= weights.max()
 
-        return {
-            "observations": self.observations[indices],
-            "actions": self.actions[indices],
-            "rewards": self.rewards[indices],
-            "next_observations": self.next_observations[indices],
-            "dones": self.dones[indices],
-            "indices": indices,
-            "weights": weights,
-        }
+        # ##: Retrieve the batch data using the base class helper method.
+        batch_data = super()._get_batch(indices)
+
+        # ##: Add prioritized buffer specific items.
+        batch_data["indices"] = indices
+        batch_data["weights"] = weights
+
+        return batch_data
 
     def update_priorities(self, indices: ndarray, priorities: ndarray) -> None:
         """
@@ -145,7 +145,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         if len(indices) != len(priorities):
             raise ValueError("indices and priorities must have the same length")
 
-        if np.any(indices >= self.size):
+        if np_any(indices >= self.size):
             raise ValueError(f"indices must be less than buffer size ({self.size})")
 
         # ##: Add epsilon to ensure non-zero sampling probability.
