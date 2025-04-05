@@ -9,11 +9,12 @@ training, and logging (via AIM).
 
 import sys
 from argparse import ArgumentParser
-from logging import getLogger
 from pathlib import Path
 from time import time
 from traceback import format_exc
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+from loguru import logger
 
 from reinforce.agents import A2CAgent
 from reinforce.configs import ConfigManager
@@ -21,8 +22,9 @@ from reinforce.core import BaseAgent, BaseEnvironment
 from reinforce.environments import MazeEnvironment
 from reinforce.trainers import EpisodeTrainer
 from reinforce.utils import AimLogger
+from reinforce.utils.logging_setup import setup_logger
 
-logger = getLogger(__name__)
+setup_logger()
 
 
 class ExperimentRunner:

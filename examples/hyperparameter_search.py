@@ -14,9 +14,13 @@ import argparse
 
 from reinforce.configs import ConfigManager
 from reinforce.experiments import HyperparameterSearch
+from reinforce.utils import setup_logger
+from loguru import logger
+
+setup_logger()
 
 
-def main(search_config_path, n_trials=20, timeout=None):
+def main(search_config_path, n_trials=20):
     """Run a hyperparameter search example using Optuna.
     
     Args:
@@ -31,36 +35,28 @@ def main(search_config_path, n_trials=20, timeout=None):
     search = HyperparameterSearch()
     
     # Run the search
-    print(f"Running Optuna-based hyperparameter search with configuration: {search_config_path}")
-    print(f"Number of trials: {n_trials}")
+    logger.info(f"Running Optuna-based hyperparameter search with configuration: {search_config_path}")
+    logger.info(f"Number of trials: {n_trials}")
     
-    results = search.run_search(
-        search_config_path,
-        n_trials=n_trials,
-        timeout=timeout
-    )
+    results = search.run_search(search_config_path, n_trials=n_trials)
     
     # Print results
-    print("\nHyperparameter Search Results:")
-    print(f"Number of experiments: {results['num_completed_trials']}")
-    print(f"Best experiment: {results['best_trial_number']}")
-    print(f"Best mean reward: {results['best_mean_reward']:.4f}")
-    print("\nBest hyperparameters:")
+    logger.info("\nHyperparameter Search Results:")
+    logger.info(f"Number of experiments: {results['num_completed_trials']}")
+    logger.info(f"Best experiment: {results['best_trial_number']}")
+    logger.info(f"Best mean reward: {results['best_mean_reward']:.4f}")
+    logger.info("\nBest hyperparameters:")
     for param, value in results['best_hyperparameters'].items():
-        print(f"  {param}: {value}")
+        logger.info(f"  {param}: {value}")
     
-    print("\nVisualization plots saved to outputs/hyperparameter_search/visualizations/")
+    logger.info("\nVisualization plots saved to outputs/hyperparameter_search/visualizations/")
 
 
 if __name__ == "__main__":
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Run an Optuna-based hyperparameter search for an agent")
-    parser.add_argument("--config", type=str, default="examples/configs/a2c_search.yaml",
-                        help="Path to the search configuration file")
-    parser.add_argument("--trials", type=int, default=20,
-                        help="Number of trials to run")
-    parser.add_argument("--timeout", type=int, default=None,
-                        help="Timeout in seconds (optional)")
+    parser.add_argument("--config", type=str, default="examples/configs/a2c_search.yaml", help="Path to the search configuration file")
+    parser.add_argument("--trials", type=int, default=20, help="Number of trials to run")
     args = parser.parse_args()
     
     # Create example search configuration if it doesn't exist
@@ -131,7 +127,7 @@ if __name__ == "__main__":
         
         # Save the search configuration
         config_manager.save_config(search_config, args.config)
-        print(f"Created example Optuna search configuration: {args.config}")
+        logger.info(f"Created example Optuna search configuration: {args.config}")
     
     # Run the example
-    main(args.config, args.trials, args.timeout)
+    main(args.config, args.trials)

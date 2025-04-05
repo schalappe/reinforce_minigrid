@@ -5,7 +5,7 @@ Utility functions and classes for reinforcement learning.
 
 from reinforce.utils.aim_logger import AimLogger
 from reinforce.utils.buffers import PrioritizedReplayBuffer, ReplayBuffer
-from reinforce.utils.losses import compute_a2c_loss, huber_loss
+from reinforce.utils.logging_setup import setup_logger
 from reinforce.utils.preprocessing import (
     frame_stack,
     normalize_image,
@@ -19,6 +19,5 @@ __all__ = [
     "frame_stack",
     "ReplayBuffer",
     "PrioritizedReplayBuffer",
-    "huber_loss",
-    "compute_a2c_loss",
+    "setup_logger",
 ]

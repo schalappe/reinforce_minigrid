@@ -8,12 +8,12 @@ It supports parallel execution, pruning of underperforming trials, and visualiza
 
 import json
 from argparse import ArgumentParser
-from logging import getLogger
 from pathlib import Path
 from traceback import format_exc
 from typing import Any, Dict, Optional, Union
 
 from aim import Image
+from loguru import logger
 from optuna import Study, create_study
 from optuna.exceptions import TrialPruned
 from optuna.pruners import MedianPruner
@@ -28,8 +28,9 @@ from optuna.visualization import (
 from reinforce.configs import ConfigManager
 from reinforce.experiments.experiment_runner import ExperimentRunner
 from reinforce.utils import AimLogger
+from reinforce.utils.logging_setup import setup_logger
 
-logger = getLogger(__name__)
+setup_logger()
 
 
 class HyperparameterSearch:

@@ -7,15 +7,18 @@ It simplifies initializing runs, logging various data types (parameters, metrics
 managing the run lifecycle.
 """
 
-import logging
+# Removed: import logging
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from aim.sdk.objects import Image as AimImage
 from aim.sdk.objects import Text as AimText
 from aim.sdk.run import Run
+from loguru import logger
 
-logger = logging.getLogger(__name__)
+from reinforce.utils.logging_setup import setup_logger
+
+setup_logger()
 
 
 class AimLogger:
