@@ -110,9 +110,9 @@ class HyperparameterSearch:
         """
         Load search and base configurations.
 
-        Loads the hyperparameter search configuration and the base experiment configuration. The base configuration
-        can be specified as a file path in the search configuration, or provided inline as a dictionary. If an AimLogger
-        instance is provided, the configurations are logged to AIM for tracking purposes.
+        Loads the hyperparameter search configuration and the base experiment configuration. The base
+        configuration can be specified as a file path in the search configuration, or provided inline as a dictionary.
+        If an AimLogger instance is provided, the configurations are logged to AIM for tracking purposes.
 
         Parameters
         ----------

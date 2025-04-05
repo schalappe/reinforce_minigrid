@@ -15,10 +15,19 @@ from traceback import format_exc
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from loguru import logger
+from pydantic import ValidationError
 
 from reinforce.agents import A2CAgent
 from reinforce.configs import ConfigManager
-from reinforce.core import BaseAgent, BaseEnvironment
+from reinforce.configs.models import (
+    A2CConfig,
+    AgentConfigUnion,
+    EnvironmentConfig,
+    EpisodeTrainerConfig,
+    ExperimentConfig,
+    TrainerConfigUnion,
+)
+from reinforce.core import BaseAgent, BaseEnvironment, BaseTrainer
 from reinforce.environments import MazeEnvironment
 from reinforce.trainers import EpisodeTrainer
 from reinforce.utils import AimLogger
@@ -51,11 +60,12 @@ class ExperimentRunner:
         experiment_config_path: Union[str, Path],
         pruning_callback: Optional[Callable[[int, float], None]] = None,
         aim_tags: Optional[List[str]] = None,
-    ) -> Tuple[Dict[str, Any], EpisodeTrainer, Optional[AimLogger]]:
+    ) -> Tuple[ExperimentConfig, BaseTrainer, Optional[AimLogger]]:
         """
         Set up the experiment components: configuration, environment, agent, trainer and logger.
 
-        This method loads the experiment configuration, initializes the AIM logger, creates the environment and agent
+        This method loads and validates the experiment configuration using Pydantic, initializes the AIM logger,
+        creates the environment and agent
         based on the configuration, and sets up the trainer with the appropriate configurations.
 
         Parameters
@@ -69,42 +79,52 @@ class ExperimentRunner:
 
         Returns
         -------
-        Tuple[Dict[str, Any], EpisodeTrainer, Optional[AimLogger]]
-            A tuple containing the experiment configuration, the initialized trainer, and the AIM logger.
+        Tuple[ExperimentConfig, BaseTrainer, Optional[AimLogger]]
+            A tuple containing the validated Pydantic configuration object, the initialized trainer,
+            and the AIM logger.
+
+        Raises
+        ------
+        ValueError
+            If configuration loading or validation fails.
         """
-        config = self.config_manager.load_experiment_config(str(experiment_config_path))
+        try:
+            config = self.config_manager.load_experiment_config(str(experiment_config_path))
+        except (FileNotFoundError, ValueError, ValidationError) as e:
+            logger.error(f"Failed to load or validate experiment config '{experiment_config_path}': {e}")
+            raise ValueError(f"Configuration error: {e}") from e
+
         experiment_name = Path(experiment_config_path).stem
 
         # ##: Initialize AIM Logger.
-        base_tags = ["reinforce", config.get("agent", {}).get("agent_type", "unknown_agent")]
+        base_tags = ["reinforce", config.agent.agent_type]
         if aim_tags:
             base_tags.extend(aim_tags)
 
         aim_logger = AimLogger(
-            experiment_name=config.get("aim_experiment_name", experiment_name), tags=list(set(base_tags))
+            experiment_name=config.aim_experiment_name or experiment_name, tags=list(set(base_tags))
         )
 
         if not aim_logger.run:
             logger.info("Failed to initialize AIM logger. Proceeding without AIM tracking.")
         else:
-            aim_logger.log_params(config, prefix="experiment_config")
-            aim_logger.log_params(config.get("agent", {}), prefix="agent_config")
-            aim_logger.log_params(config.get("environment", {}), prefix="env_config")
+            # ##: Log Pydantic models by dumping them to dicts.
+            aim_logger.log_params(config.model_dump(exclude={"agent", "trainer", "environment"}), prefix="experiment")
+            aim_logger.log_params(config.agent.model_dump(), prefix="agent")
+            aim_logger.log_params(config.environment.model_dump(), prefix="environment")
+            aim_logger.log_params(
+                config.trainer.model_dump(exclude={"_trial_info", "_pruning_callback"}), prefix="trainer"
+            )
 
-        # ##: Check if this is an Optuna trial.
-        trial_info = config.get("_trial_info", None)
+        # ##: Set up the environment, agent, and trainer using Pydantic config objects.
+        environment = self._create_environment(config.environment)
+        agent = self._create_agent(config.agent)
 
-        # ##: Set up the environment, agent, and trainer.
-        environment = self._create_environment(config.get("environment", {}))
-        agent = self._create_agent(config.get("agent", {}), environment)
+        # ##: Pass pruning callback directly if Optuna trial info exists in the config.
+        if config.trial_info is not None:
+            config.trainer.pruning_callback = pruning_callback
 
-        # ## Add pruning support to trainer config if needed.
-        trainer_config = config.get("trainer", {}).copy()
-        if trial_info is not None:
-            trainer_config["_trial_info"] = trial_info
-            trainer_config["_pruning_callback"] = pruning_callback
-
-        trainer = self._create_trainer(trainer_config, agent, environment, aim_logger)
+        trainer = self._create_trainer(config.trainer, agent, environment, aim_logger)
 
         return config, trainer, aim_logger
 
@@ -161,14 +181,14 @@ class ExperimentRunner:
                 aim_logger.log_params({"experiment_duration_readable": f"{duration_seconds:.2f}s"})
             logger.info(f"Experiment duration: {duration_seconds:.2f} seconds")
 
-            # ##: Save results if specified.
-            if "save_results" in config and config["save_results"]:
-                results_dir = Path(config.get("results_dir", "outputs/results"))
-                results_dir.mkdir(parents=True, exist_ok=True)
+            # ##: Save results if specified in the Pydantic config.
+            if config.save_results:
+                config.results_dir.mkdir(parents=True, exist_ok=True)
 
                 experiment_name = Path(experiment_config_path).stem
-                results_path = results_dir / f"{experiment_name}_results.json"
+                results_path = config.results_dir / f"{experiment_name}_results.json"
 
+                # ##: save_config now expects a dict, results is already a dict.
                 self.config_manager.save_config(results, str(results_path))
 
             return results
@@ -178,14 +198,18 @@ class ExperimentRunner:
             if aim_logger and aim_logger.run:
                 aim_logger.log_text(f"Experiment failed: {exc}\n{format_exc()}", name="error_log")
                 aim_logger.close()
+
+            # ##: Ensure AIM logger is closed on error.
+            if aim_logger and aim_logger.run:
+                aim_logger.close()
             sys.exit(1)
 
     @staticmethod
-    def _create_environment(env_config: Dict[str, Any]) -> MazeEnvironment:
+    def _create_environment(env_config: EnvironmentConfig) -> MazeEnvironment:
         """
-        Create an environment based on the configuration.
+        Create an environment based on the Pydantic configuration model.
 
-        This method creates and returns a `MazeEnvironment` instance based on the provided configuration.
+        This method creates and returns a `MazeEnvironment` instance based on the provided config model.
 
         Parameters
         ----------
@@ -195,98 +219,88 @@ class ExperimentRunner:
         Returns
         -------
         MazeEnvironment
-            Created environment.
+            Created environment instance.
 
         Notes
         -----
-        Currently only supports `MazeEnvironment`.
+        Currently only supports `MazeEnvironment`. Needs update if more env types are added.
         """
-        use_image_obs = env_config.get("use_image_obs", True)
-        return MazeEnvironment(use_image_obs=use_image_obs)
+        if env_config.env_type == "MazeEnvironment":
+            return MazeEnvironment(use_image_obs=env_config.use_image_obs)
+        raise ValueError(f"Unsupported environment type: {env_config.env_type}")
 
     @staticmethod
-    def _create_agent(agent_config: Dict[str, Any], environment) -> A2CAgent:
+    def _create_agent(agent_config: AgentConfigUnion) -> BaseAgent:
         """
-        Create an agent based on the configuration.
+        Create an agent based on the Pydantic configuration model.
 
-        This method creates and returns an agent instance based on the provided configuration.
-        Currently, only A2C agents are supported.
+        This method creates and returns an agent instance based on the provided config model.
+        It uses the `agent_type` field to determine which agent class to instantiate.
 
         Parameters
         ----------
-        agent_config : Dict[str, Any]
-            Agent configuration.
-        environment : Environment
-            Environment to use.
+        agent_config : AgentConfigUnion
+            Pydantic agent configuration model (e.g., A2CConfig).
 
         Returns
         -------
-        A2CAgent
-            Created agent.
+        BaseAgent
+            Created agent instance.
 
         Raises
         ------
         ValueError
-            If the agent type is not supported.
+            If the agent type specified in the config is not supported.
         """
-        agent_type = agent_config.get("agent_type", "A2C")
+        if agent_config.agent_type == "A2C":
+            if isinstance(agent_config, A2CConfig):
+                return A2CAgent(action_space=agent_config.action_space, hyperparameters=agent_config)
+            raise TypeError(f"Expected A2CConfig, got {type(agent_config)}")
 
-        if agent_type == "A2C":
-            action_space = agent_config.get("action_space", environment.action_space.n)
-
-            # ##: Extract hyperparameters expected by A2CAgent from the config.
-            hyperparams = {
-                "embedding_size": agent_config.get("embedding_size", 128),
-                "learning_rate": agent_config.get("learning_rate", 0.001),
-                "discount_factor": agent_config.get("discount_factor", 0.99),
-                "entropy_coef": agent_config.get("entropy_coef", 0.01),
-                "value_coef": agent_config.get("value_coef", 0.5),
-            }
-
-            return A2CAgent(action_space=action_space, hyperparameters=hyperparams)
-
-        raise ValueError(f"Unsupported agent type: {agent_type}")
+        raise ValueError(f"Unsupported agent type: {agent_config.agent_type}")
 
     @staticmethod
     def _create_trainer(
-        trainer_config: Dict[str, Any],
+        trainer_config: TrainerConfigUnion,
         agent: BaseAgent,
         environment: BaseEnvironment,
         aim_logger: Optional[AimLogger] = None,
-    ) -> EpisodeTrainer:
+    ) -> BaseTrainer:
         """
-        Create a trainer based on the configuration.
+        Create a trainer based on the Pydantic configuration model.
 
-        This method creates and returns a trainer instance based on the provided configuration.
-        Currently, only `EpisodeTrainer` is supported.
+        This method creates and returns a trainer instance based on the provided config model.
+        It uses the `trainer_type` field to determine which trainer class to instantiate.
 
         Parameters
         ----------
-        trainer_config : Dict[str, Any]
-            Trainer configuration.
-        agent : Agent
-            Agent to train.
-        environment : Environment
-            Environment to train in.
+        trainer_config : TrainerConfigUnion
+            Pydantic trainer configuration model (e.g., EpisodeTrainerConfig).
+        agent : BaseAgent
+            The agent instance to be trained.
+        environment : BaseEnvironment
+            The environment instance to train in.
         aim_logger : AimLogger, optional
-            Logger for tracking metrics.
+            AIM logger instance for experiment tracking.
 
         Returns
         -------
-        EpisodeTrainer
-            Created trainer.
+        BaseTrainer
+            Created trainer instance.
 
         Raises
         ------
         ValueError
-            If the trainer type is not supported.
+            If the trainer type specified in the config is not supported.
         """
-        trainer_type = trainer_config.get("trainer_type", "EpisodeTrainer")
+        if trainer_config.trainer_type == "EpisodeTrainer":
+            if isinstance(trainer_config, EpisodeTrainerConfig):
+                return EpisodeTrainer(
+                    agent=agent, environment=environment, config=trainer_config, aim_logger=aim_logger
+                )
+            raise TypeError(f"Expected EpisodeTrainerConfig, got {type(trainer_config)}")
 
-        if trainer_type == "EpisodeTrainer":
-            return EpisodeTrainer(agent=agent, environment=environment, config=trainer_config, aim_logger=aim_logger)
-
-        raise ValueError(f"Unsupported trainer type: {trainer_type}")
+        raise ValueError(f"Unsupported trainer type: {trainer_config.trainer_type}")
 
 
 def main():

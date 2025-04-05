@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+Logger configuration module for the module.
+
+This module sets up the Loguru logger with a custom format and logging level.
+"""
+
 import sys
 
 from loguru import logger
@@ -5,10 +12,9 @@ from loguru import logger
 
 def setup_logger():
     """
-    Configures the Loguru logger for the application.
+    Configures the Loguru logger for the module.
 
-    Sets up a handler to log messages to stderr with a specific format
-    and sets the default logging level to DEBUG.
+    Sets up a handler to log messages to stderr with a specific format and sets the default logging level to INFO.
     """
     logger.remove()
     logger.add(

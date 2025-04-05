@@ -5,12 +5,12 @@ Configuration management for the reinforcement learning framework.
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import yaml
+from pydantic import BaseModel, ValidationError
 
-from reinforce.configs.schemas.agent_schema import validate_agent_config
-from reinforce.configs.schemas.trainer_schema import validate_trainer_config
+from reinforce.configs.models import ExperimentConfig
 
 
 class ConfigManager:
@@ -60,25 +60,25 @@ class ConfigManager:
         file_ext = path_obj.suffix.lower()
 
         if file_ext in (".yaml", ".yml"):
-            with path_obj.open("r", encoding="utf-8") as f:
-                config = yaml.safe_load(f)
+            with path_obj.open("r", encoding="utf-8") as file:
+                config = yaml.safe_load(file)
         elif file_ext == ".json":
-            with path_obj.open("r", encoding="utf-8") as f:
-                config = json.load(f)
+            with path_obj.open("r", encoding="utf-8") as file:
+                config = json.load(file)
         else:
             raise ValueError(f"Unsupported file format: {file_ext}")
 
         return config
 
     @staticmethod
-    def save_config(config: Dict[str, Any], path: str) -> None:
+    def save_config(config: Union[BaseModel, Dict[str, Any]], path: str) -> None:
         """
-        Save a configuration to a file.
+        Save a Pydantic configuration model to a file.
 
         Parameters
         ----------
-        config : Dict[str, Any]
-            Configuration dictionary.
+        config : BaseModel | Dict[str, Any]
+            Pydantic configuration model or dictionary to save.
         path : str | Path
             Path to save the configuration to.
 
@@ -93,108 +93,21 @@ class ConfigManager:
         # ##: Create directory if it doesn't exist.
         path_obj.parent.mkdir(parents=True, exist_ok=True)
 
+        # ##: Dump Pydantic model to dict before saving.
+        config_dict = config.model_dump(mode="json") if isinstance(config, BaseModel) else config
+
         if file_ext in (".yaml", ".yml"):
             with path_obj.open("w", encoding="utf-8") as file:
-                yaml.dump(config, file, default_flow_style=False)
+                yaml.dump(config_dict, file, default_flow_style=False, sort_keys=False)
         elif file_ext == ".json":
             with path_obj.open("w", encoding="utf-8") as file:
-                json.dump(config, file, indent=2)
+                json.dump(config_dict, file, indent=2)
         else:
             raise ValueError(f"Unsupported file format: {file_ext}")
 
-    @staticmethod
-    def validate_agent_config(config: Dict[str, Any]) -> None:
+    def load_experiment_config(self, path: str) -> ExperimentConfig:
         """
-        Validate an agent configuration.
-
-        Parameters
-        ----------
-        config : Dict[str, Any]
-            Agent configuration to validate.
-
-        Raises
-        ------
-        ValidationError
-            If the configuration is invalid.
-        """
-        validate_agent_config(config)
-
-    @staticmethod
-    def validate_trainer_config(config: Dict[str, Any]) -> None:
-        """
-        Validate a trainer configuration.
-
-        Parameters
-        ----------
-        config : Dict[str, Any]
-            Trainer configuration to validate.
-
-        Raises
-        ------
-        ValidationError
-            If the configuration is invalid.
-        """
-        validate_trainer_config(config)
-
-    def get_default_config(self, config_type: str, name: str) -> Dict[str, Any]:
-        """
-        Get a default configuration.
-
-        Parameters
-        ----------
-        config_type : str
-            Type of configuration (agent, environment, trainer, etc.).
-        name : str
-            Name of the configuration.
-
-        Returns
-        -------
-        Dict[str, Any]
-            Default configuration dictionary.
-
-        Raises
-        ------
-        FileNotFoundError
-            If the default configuration is not found.
-        """
-        config_path = self.config_dir / config_type / f"{name}.yaml"
-
-        if not config_path.exists():
-            raise FileNotFoundError(f"Default configuration not found: {config_path}")
-
-        return self.load_config(str(config_path))
-
-    def merge_configs(self, base_config: Dict[str, Any], override_config: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Merge two configurations.
-
-        Parameters
-        ----------
-        base_config : Dict[str, Any]
-            Base configuration.
-        override_config : Dict[str, Any]
-            Configuration to override base configuration.
-
-        Returns
-        -------
-        Dict[str, Any]
-            Merged configuration.
-        """
-        merged_config = base_config.copy()
-
-        for key, value in override_config.items():
-            if isinstance(value, dict) and key in merged_config and isinstance(merged_config[key], dict):
-                merged_config[key] = self.merge_configs(merged_config[key], value)
-            else:
-                merged_config[key] = value
-
-        return merged_config
-
-    def load_experiment_config(self, path: str) -> Dict[str, Any]:
-        """
-        Load an experiment configuration.
-
-        An experiment configuration includes configurations for agent, environment, trainer, and other components.
+        Load and validate an experiment configuration using Pydantic.
 
         Parameters
         ----------
@@ -203,39 +116,21 @@ class ConfigManager:
 
         Returns
         -------
-        Dict[str, Any]
-            Experiment configuration dictionary.
+        ExperimentConfig
+            Validated experiment configuration object.
 
         Raises
         ------
         FileNotFoundError
             If the configuration file is not found.
         ValueError
-            If the file format is not supported.
+            If the file format is not supported or validation fails.
         """
-        config = self.load_config(path)
-        # ##: Validate and process agent configuration.
-        if "agent" in config:
-            if isinstance(config["agent"], str):
-                agent_config = self.get_default_config("agent", config["agent"])
-            elif isinstance(config["agent"], dict):
-                agent_config = config["agent"]
-            else:
-                raise ValueError(f"Invalid agent configuration type: {type(config['agent'])}")
+        raw_config = self.load_config(path)
 
-            self.validate_agent_config(agent_config)
-            config["agent"] = agent_config
-
-        # ##: Validate and process trainer configuration.
-        if "trainer" in config:
-            if isinstance(config["trainer"], str):
-                trainer_config = self.get_default_config("trainer", config["trainer"])
-            elif isinstance(config["trainer"], dict):
-                trainer_config = config["trainer"]
-            else:
-                raise ValueError(f"Invalid trainer configuration type: {type(config['trainer'])}")
-
-            self.validate_trainer_config(trainer_config)
-            config["trainer"] = trainer_config
-
-        return config
+        try:
+            # ##: Parse and validate the raw dictionary using the Pydantic model.
+            experiment_config = ExperimentConfig(**raw_config)
+            return experiment_config
+        except ValidationError as exc:
+            raise ValueError(f"Configuration validation failed: {exc}") from exc

@@ -3,6 +3,7 @@
 A2C Agent implementation.
 """
 
+import json
 import os
 from typing import Any, Dict, Tuple
 
@@ -12,6 +13,7 @@ from keras import models, optimizers
 from numpy import ndarray
 
 from reinforce.agents.a2c.a2c_model import A2CModel
+from reinforce.configs.models import A2CConfig
 from reinforce.core.base_agent import BaseAgent
 from reinforce.utils.preprocessing import preprocess_observation
 
@@ -23,28 +25,30 @@ class A2CAgent(BaseAgent):
     This class implements the BaseAgent interface for the A2C algorithm.
     """
 
-    def __init__(self, action_space: int, hyperparameters: Dict[str, Any]):
+    def __init__(self, action_space: int, hyperparameters: A2CConfig):
         """
         Initialize the A2C agent.
 
         Parameters
         ----------
         action_space : int
-            Number of possible actions.
-        hyperparameters : Dict[str, Any]
-            Dictionary of hyperparameters including:
-            - embedding_size (int): Size of the embedding layer.
-            - learning_rate (float): Learning rate for the optimizer.
-            - discount_factor (float): Discount factor for future rewards.
-            - entropy_coef (float): Entropy regularization coefficient.
-            - value_coef (float): Value loss coefficient.
+            Number of possible actions. Should match `hyperparameters.action_space`.
+        hyperparameters : A2CConfig
+            Pydantic model containing hyperparameters.
         """
         self._name = "A2CAgent"
-        self.action_space = action_space
-        self.hyperparameters = hyperparameters
 
-        self._model = A2CModel(action_space=action_space, embedding_size=self.hyperparameters["embedding_size"])
-        self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters["learning_rate"])
+        # ##: Ensure action_space consistency.
+        if action_space != hyperparameters.action_space:
+            raise ValueError(
+                f"action_space ({action_space}) must match hyperparameters.action_space ({hyperparameters.action_space})"
+            )
+        self.action_space = action_space
+        self.hyperparameters: A2CConfig = hyperparameters
+
+        # ##: Access attributes directly from Pydantic model.
+        self._model = A2CModel(action_space=action_space, embedding_size=self.hyperparameters.embedding_size)
+        self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters.learning_rate)
 
         self.step_counter = 0
 
@@ -153,8 +157,7 @@ class A2CAgent(BaseAgent):
         next_values = tf.squeeze(next_values)
 
         # ##: Calculate returns using TD(lambda) with lambda=0 (i.e., TD(0)).
-        discount_factor = self.hyperparameters["discount_factor"]
-        returns = rewards + discount_factor * next_values * (1.0 - dones)
+        returns = rewards + self.hyperparameters.discount_factor * next_values * (1.0 - dones)
 
         # ##: Calculate advantages.
         advantages = returns - values
@@ -180,14 +183,12 @@ class A2CAgent(BaseAgent):
         policy_loss = -tf.reduce_mean(selected_action_log_probs * advantages)
 
         # ##: Calculate value loss.
-        value_coef = self.hyperparameters["value_coef"]
-        value_loss = value_coef * tf.reduce_mean(tf.square(returns - values))
+        value_loss = self.hyperparameters.value_coef * tf.reduce_mean(tf.square(returns - values))
 
         # ##: Calculate entropy loss (for exploration).
         action_probs = tf.nn.softmax(action_logits)
         entropy = -tf.reduce_sum(action_probs * tf.math.log(action_probs + 1e-10), axis=1)
-        entropy_coef = self.hyperparameters["entropy_coef"]
-        entropy_loss = -entropy_coef * tf.reduce_mean(entropy)
+        entropy_loss = -self.hyperparameters.entropy_coef * tf.reduce_mean(entropy)
 
         # ##: Calculate total loss.
         total_loss = policy_loss + value_loss + entropy_loss
@@ -218,7 +219,6 @@ class A2CAgent(BaseAgent):
             Dictionary of training metrics.
         """
         with tf.GradientTape() as tape:
-            # ##: Forward pass.
             # ##: Forward pass.
             action_logits, values = self._model(observations)
             values = tf.squeeze(values)
@@ -261,11 +261,10 @@ class A2CAgent(BaseAgent):
         # but save the step counter which might be related.
         np.save(os.path.join(path, "step_counter.npy"), self.step_counter)
 
-        # ##: Save the hyperparameters.
-        # Add action_space to the hyperparameters dict before saving
-        save_hyperparams = self.hyperparameters.copy()
-        save_hyperparams["action_space"] = self.action_space
-        np.save(os.path.join(path, "hyperparams.npy"), save_hyperparams)
+        # ##: Save the hyperparameters by dumping the Pydantic model to JSON.
+        hyperparams_path = os.path.join(path, "hyperparams.json")
+        with open(hyperparams_path, "w", encoding="utf-8") as file:
+            file.write(self.hyperparameters.model_dump_json(indent=2))
 
     def load(self, path: str) -> None:
         """
@@ -277,19 +276,20 @@ class A2CAgent(BaseAgent):
             Directory path to load the agent from.
         """
         # ##: Load the model.
-        self._model = models.load_model(os.path.join(path, "model"))
+        self._model = models.load_model(os.path.join(path, f"{self._name}_model.keras"))
 
         # ##: Load the optimizer state (see note in save method).
         self.step_counter = np.load(os.path.join(path, "step_counter.npy")).item()
 
-        # ##: Load the hyperparameters.
-        loaded_hyperparams = np.load(os.path.join(path, "hyperparams.npy"), allow_pickle=True).item()
-        self.action_space = loaded_hyperparams.pop("action_space")  # Extract action_space
-        self.hyperparameters = loaded_hyperparams  # Store the rest
+        # ##: Load the hyperparameters from JSON and parse into Pydantic model.
+        hyperparams_path = os.path.join(path, "hyperparams.json")
+        with open(hyperparams_path, "r", encoding="utf-8") as f:
+            loaded_hyperparams_dict = json.load(f)
+        self.hyperparameters = A2CConfig(**loaded_hyperparams_dict)
+        self.action_space = self.hyperparameters.action_space
 
-        # Re-initialize optimizer with loaded learning rate
-        self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters["learning_rate"])
-        # Note: Loading full optimizer state might be needed for momentum etc.
+        # ##: Re-initialize optimizer with loaded learning rate.
+        self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters.learning_rate)
 
     @property
     def name(self) -> str:
