@@ -197,9 +197,10 @@ class EpisodeTrainer(BaseTrainer):
                                 logger.warning("Could not log action probabilities distribution: %s", exc)
 
                         other_agent_metrics = {k: v for k, v in agent_info.items() if k != "action_probs"}
-                        if other_agent_metrics:
+                        scalar_agent_metrics = {k: v for k, v in other_agent_metrics.items() if np.isscalar(v)} # Filter for scalars
+                        if scalar_agent_metrics: # Log only scalar metrics
                             self.aim_logger.log_metrics(
-                                other_agent_metrics,
+                                scalar_agent_metrics,
                                 step=self.total_steps,
                                 epoch=self.episode,
                                 context={"subset": "train_action"},

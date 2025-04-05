@@ -16,13 +16,12 @@ from reinforce.configs import ConfigManager
 from reinforce.experiments import HyperparameterSearch
 
 
-def main(search_config_path, n_trials=20, n_jobs=-1, timeout=None):
+def main(search_config_path, n_trials=20, timeout=None):
     """Run a hyperparameter search example using Optuna.
     
     Args:
         search_config_path: Path to the search configuration file
         n_trials: Number of trials to run
-        n_jobs: Number of parallel jobs (-1 uses all CPU cores)
         timeout: Optional timeout in seconds
     """
     # Create output directories
@@ -33,12 +32,11 @@ def main(search_config_path, n_trials=20, n_jobs=-1, timeout=None):
     
     # Run the search
     print(f"Running Optuna-based hyperparameter search with configuration: {search_config_path}")
-    print(f"Number of trials: {n_trials}, Parallel jobs: {n_jobs}")
+    print(f"Number of trials: {n_trials}")
     
     results = search.run_search(
         search_config_path,
         n_trials=n_trials,
-        n_jobs=n_jobs,
         timeout=timeout
     )
     
@@ -61,8 +59,6 @@ if __name__ == "__main__":
                         help="Path to the search configuration file")
     parser.add_argument("--trials", type=int, default=20,
                         help="Number of trials to run")
-    parser.add_argument("--jobs", type=int, default=-1,
-                        help="Number of parallel jobs (-1 uses all cores)")
     parser.add_argument("--timeout", type=int, default=None,
                         help="Timeout in seconds (optional)")
     args = parser.parse_args()
@@ -138,4 +134,4 @@ if __name__ == "__main__":
         print(f"Created example Optuna search configuration: {args.config}")
     
     # Run the example
-    main(args.config, args.trials, args.jobs, args.timeout)
+    main(args.config, args.trials, args.timeout)
