@@ -36,24 +36,15 @@ class BaseAgent(ABC):
         """
 
     @abstractmethod
-    def learn(
-        self, observations: ndarray, actions: ndarray, rewards: ndarray, next_observations: ndarray, dones: ndarray
-    ) -> Dict[str, Any]:
+    def learn(self, experience_batch: Dict[str, ndarray]) -> Dict[str, Any]:
         """
-        Update the agent based on experiences.
+        Update the agent based on a batch of experiences.
 
         Parameters
         ----------
-        observations : np.ndarray
-            Batch of observations.
-        actions : np.ndarray
-            Batch of actions taken.
-        rewards : np.ndarray
-            Batch of rewards received.
-        next_observations : np.ndarray
-            Batch of next observations.
-        dones : np.ndarray
-            Batch of episode termination flags.
+        experience_batch : Dict[str, np.ndarray]
+            A dictionary containing batches of experiences, typically including keys like
+            'observations', 'actions', 'rewards', 'next_observations', and 'dones'.
 
         Returns
         -------
@@ -94,7 +85,6 @@ class BaseAgent(ABC):
         str
             The name of the agent.
         """
-        pass
 
     @property
     @abstractmethod

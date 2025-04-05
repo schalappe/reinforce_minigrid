@@ -60,7 +60,11 @@ class HyperparameterSearch:
         self.search_aim_logger: Optional[AimLogger] = None
 
     def run_search(
-        self, search_config_path: Union[str, Path], n_trials: int = 20, timeout: Optional[int] = None
+        self,
+        search_config_path: Union[str, Path],
+        n_trials: int = 20,
+        n_jobs: int = 1,
+        timeout: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Run a hyperparameter search using Optuna.
@@ -71,6 +75,8 @@ class HyperparameterSearch:
             Path to the search configuration file.
         n_trials : int, optional
             Number of trials to run, by default 20.
+        n_jobs : int, optional
+            Number of parallel jobs for Optuna, by default 1. Use -1 for all cores.
         timeout : int, optional
             Timeout in seconds. None means no timeout, by default None.
 
@@ -108,6 +114,7 @@ class HyperparameterSearch:
                 {
                     "search_config_path": str(search_config_path),
                     "n_trials": n_trials,
+                    "n_jobs": n_jobs,
                     "timeout": timeout,
                     "search_name": search_config_name,
                 },
@@ -174,6 +181,7 @@ class HyperparameterSearch:
             self.study.optimize(
                 lambda trial: self._objective(trial),
                 n_trials=n_trials,
+                n_jobs=n_jobs,
                 timeout=timeout,
                 show_progress_bar=True,
             )

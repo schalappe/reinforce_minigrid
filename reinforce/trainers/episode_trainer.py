@@ -171,10 +171,17 @@ class EpisodeTrainer(BaseTrainer):
                     np_next_observations = np.array(next_observations)
                     np_dones = np.array(dones)
 
+                    # ##: Prepare experience batch dictionary.
+                    experience_batch = {
+                        "observations": np_observations,
+                        "actions": np_actions,
+                        "rewards": np_rewards,
+                        "next_observations": np_next_observations,
+                        "dones": np_dones,
+                    }
+
                     # ##: Agent learning step.
-                    learn_info = self.agent.learn(
-                        np_observations, np_actions, np_rewards, np_next_observations, np_dones
-                    )
+                    learn_info = self.agent.learn(experience_batch)
 
                     # ##: Log agent learning info if available and logger exists.
                     if self.aim_logger and learn_info and isinstance(learn_info, dict):
@@ -197,8 +204,10 @@ class EpisodeTrainer(BaseTrainer):
                                 logger.warning("Could not log action probabilities distribution: %s", exc)
 
                         other_agent_metrics = {k: v for k, v in agent_info.items() if k != "action_probs"}
-                        scalar_agent_metrics = {k: v for k, v in other_agent_metrics.items() if np.isscalar(v)} # Filter for scalars
-                        if scalar_agent_metrics: # Log only scalar metrics
+                        scalar_agent_metrics = {
+                            k: v for k, v in other_agent_metrics.items() if np.isscalar(v)
+                        }  # Filter for scalars
+                        if scalar_agent_metrics:  # Log only scalar metrics
                             self.aim_logger.log_metrics(
                                 scalar_agent_metrics,
                                 step=self.total_steps,

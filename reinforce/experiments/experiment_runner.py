@@ -7,10 +7,10 @@ learning experiments. It handles configuration loading, environment setup, agent
 training, and logging (via AIM).
 """
 
-from time import time
 from argparse import ArgumentParser
 from logging import getLogger
 from pathlib import Path
+from time import time
 from traceback import format_exc
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -94,8 +94,7 @@ class ExperimentRunner:
                 base_tags.extend(aim_tags)
 
             aim_logger = AimLogger(
-                experiment_name=config.get("aim_experiment_name", experiment_name),
-                tags=list(set(base_tags))
+                experiment_name=config.get("aim_experiment_name", experiment_name), tags=list(set(base_tags))
             )
 
             if not aim_logger.run:
@@ -201,14 +200,17 @@ class ExperimentRunner:
         agent_type = agent_config.get("agent_type", "A2C")
 
         if agent_type == "A2C":
-            return A2CAgent(
-                action_space=agent_config.get("action_space", environment.action_space.n),
-                embedding_size=agent_config.get("embedding_size", 128),
-                learning_rate=agent_config.get("learning_rate", 0.001),
-                discount_factor=agent_config.get("discount_factor", 0.99),
-                entropy_coef=agent_config.get("entropy_coef", 0.01),
-                value_coef=agent_config.get("value_coef", 0.5),
-            )
+            action_space = agent_config.get("action_space", environment.action_space.n)
+            # ##: Extract hyperparameters expected by A2CAgent from the config.
+            hyperparams = {
+                "embedding_size": agent_config.get("embedding_size", 128),
+                "learning_rate": agent_config.get("learning_rate", 0.001),
+                "discount_factor": agent_config.get("discount_factor", 0.99),
+                "entropy_coef": agent_config.get("entropy_coef", 0.01),
+                "value_coef": agent_config.get("value_coef", 0.5),
+            }
+            # ##: Instantiate agent with the new signature.
+            return A2CAgent(action_space=action_space, hyperparameters=hyperparams)
 
         raise ValueError(f"Unsupported agent type: {agent_type}")
 

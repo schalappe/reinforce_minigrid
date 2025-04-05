@@ -23,15 +23,7 @@ class A2CAgent(BaseAgent):
     This class implements the BaseAgent interface for the A2C algorithm.
     """
 
-    def __init__(
-        self,
-        action_space: int,
-        embedding_size: int = 128,
-        learning_rate: float = 0.001,
-        discount_factor: float = 0.99,
-        entropy_coef: float = 0.01,
-        value_coef: float = 0.5,
-    ):
+    def __init__(self, action_space: int, hyperparameters: Dict[str, Any]):
         """
         Initialize the A2C agent.
 
@@ -39,28 +31,22 @@ class A2CAgent(BaseAgent):
         ----------
         action_space : int
             Number of possible actions.
-        embedding_size : int, optional
-            Size of the embedding layer, by default 128.
-        learning_rate : float, optional
-            Learning rate for the optimizer, by default 0.001.
-        discount_factor : float, optional
-            Discount factor for future rewards, by default 0.99.
-        entropy_coef : float, optional
-            Entropy regularization coefficient, by default 0.01.
-        value_coef : float, optional
-            Value loss coefficient, by default 0.5.
+        hyperparameters : Dict[str, Any]
+            Dictionary of hyperparameters including:
+            - embedding_size (int): Size of the embedding layer.
+            - learning_rate (float): Learning rate for the optimizer.
+            - discount_factor (float): Discount factor for future rewards.
+            - entropy_coef (float): Entropy regularization coefficient.
+            - value_coef (float): Value loss coefficient.
         """
         self._name = "A2CAgent"
-        self._model = A2CModel(action_space=action_space, embedding_size=embedding_size)
-        self._optimizer = optimizers.Adam(learning_rate=learning_rate)
+        self.action_space = action_space
+        self.hyperparameters = hyperparameters
+
+        self._model = A2CModel(action_space=action_space, embedding_size=self.hyperparameters["embedding_size"])
+        self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters["learning_rate"])
 
         self.step_counter = 0
-        self.action_space = action_space
-
-        # ##: Store hyperparameters.
-        self.discount_factor = discount_factor
-        self.entropy_coef = entropy_coef
-        self.value_coef = value_coef
 
     def act(self, observation: ndarray, training: bool = True) -> Tuple[int, Dict[str, Any]]:
         """
@@ -98,33 +84,27 @@ class A2CAgent(BaseAgent):
             "action_logits": action_logits[0].numpy(),
         }
 
-    def learn(
-        self, observations: ndarray, actions: ndarray, rewards: ndarray, next_observations: ndarray, dones: ndarray
-    ) -> Dict[str, Any]:
+    def learn(self, experience_batch: Dict[str, ndarray]) -> Dict[str, Any]:
         """
-        Update the agent based on experiences.
+        Update the agent based on a batch of experiences.
 
         Parameters
         ----------
-        observations : np.ndarray
-            Batch of observations.
-        actions : np.ndarray
-            Batch of actions taken.
-        rewards : np.ndarray
-            Batch of rewards received.
-        next_observations : np.ndarray
-            Batch of next observations.
-        dones : np.ndarray
-            Batch of episode termination flags.
+        experience_batch : Dict[str, np.ndarray]
+            A dictionary containing batches of experiences:
+            'observations', 'actions', 'rewards', 'next_observations', 'dones'.
 
         Returns
         -------
         Dict[str, Any]
             Dictionary of learning metrics.
         """
-        # ##: Preprocess observations.
-        observations = preprocess_observation(observations)
-        next_observations = preprocess_observation(next_observations)
+        # ##: Unpack experience batch and preprocess observations.
+        observations = preprocess_observation(experience_batch["observations"])
+        actions = experience_batch["actions"]
+        rewards = experience_batch["rewards"]
+        next_observations = preprocess_observation(experience_batch["next_observations"])
+        dones = experience_batch["dones"]
 
         # ##: Convert numpy arrays to tensors.
         observations = tf.convert_to_tensor(observations, dtype=tf.float32)
@@ -173,12 +153,46 @@ class A2CAgent(BaseAgent):
         next_values = tf.squeeze(next_values)
 
         # ##: Calculate returns using TD(lambda) with lambda=0 (i.e., TD(0)).
-        returns = rewards + self.discount_factor * next_values * (1.0 - dones)
+        discount_factor = self.hyperparameters["discount_factor"]
+        returns = rewards + discount_factor * next_values * (1.0 - dones)
 
         # ##: Calculate advantages.
         advantages = returns - values
 
         return returns, advantages
+
+    def _calculate_losses(
+        self,
+        action_logits: tf.Tensor,
+        values: tf.Tensor,
+        actions: tf.Tensor,
+        returns: tf.Tensor,
+        advantages: tf.Tensor,
+    ) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]:
+        """Calculate policy, value, entropy, and total losses."""
+        # ##: Select the action probabilities for the actions that were taken.
+        indices = tf.range(tf.shape(actions)[0])
+        action_indices = tf.stack([indices, actions], axis=1)
+        action_log_probs = tf.math.log(tf.nn.softmax(action_logits) + 1e-10)
+        selected_action_log_probs = tf.gather_nd(action_log_probs, action_indices)
+
+        # ##: Calculate policy loss (negative for gradient ascent).
+        policy_loss = -tf.reduce_mean(selected_action_log_probs * advantages)
+
+        # ##: Calculate value loss.
+        value_coef = self.hyperparameters["value_coef"]
+        value_loss = value_coef * tf.reduce_mean(tf.square(returns - values))
+
+        # ##: Calculate entropy loss (for exploration).
+        action_probs = tf.nn.softmax(action_logits)
+        entropy = -tf.reduce_sum(action_probs * tf.math.log(action_probs + 1e-10), axis=1)
+        entropy_coef = self.hyperparameters["entropy_coef"]
+        entropy_loss = -entropy_coef * tf.reduce_mean(entropy)
+
+        # ##: Calculate total loss.
+        total_loss = policy_loss + value_loss + entropy_loss
+
+        return total_loss, policy_loss, value_loss, entropy_loss, tf.reduce_mean(entropy)
 
     @tf.function
     def _train_step(
@@ -205,28 +219,14 @@ class A2CAgent(BaseAgent):
         """
         with tf.GradientTape() as tape:
             # ##: Forward pass.
+            # ##: Forward pass.
             action_logits, values = self._model(observations)
             values = tf.squeeze(values)
 
-            # ##: Select the action probabilities for the actions that were taken.
-            indices = tf.range(tf.shape(actions)[0])
-            action_indices = tf.stack([indices, actions], axis=1)
-            action_log_probs = tf.math.log(tf.nn.softmax(action_logits) + 1e-10)
-            selected_action_log_probs = tf.gather_nd(action_log_probs, action_indices)
-
-            # ##: Calculate policy loss (negative for gradient ascent).
-            policy_loss = -tf.reduce_mean(selected_action_log_probs * advantages)
-
-            # ##: Calculate value loss.
-            value_loss = self.value_coef * tf.reduce_mean(tf.square(returns - values))
-
-            # ##: Calculate entropy loss (for exploration).
-            action_probs = tf.nn.softmax(action_logits)
-            entropy = -tf.reduce_sum(action_probs * tf.math.log(action_probs + 1e-10), axis=1)
-            entropy_loss = -self.entropy_coef * tf.reduce_mean(entropy)
-
-            # ##: Calculate total loss.
-            total_loss = policy_loss + value_loss + entropy_loss
+            # ##: Calculate losses using the helper method.
+            total_loss, policy_loss, value_loss, entropy_loss, entropy = self._calculate_losses(
+                action_logits, values, actions, returns, advantages
+            )
 
         # ##: Calculate gradients and apply them.
         gradients = tape.gradient(total_loss, self._model.trainable_variables)
@@ -255,17 +255,17 @@ class A2CAgent(BaseAgent):
         # ##: Save the model.
         self._model.save(os.path.join(path, f"{self._name}_model.keras"))
 
-        # ##: Save the optimizer state.
+        # ##: Save the optimizer state (weights are saved separately).
+        # Note: Optimizer state saving/loading might require more complex handling
+        # depending on the TF version and optimizer type. For simplicity, we omit it here
+        # but save the step counter which might be related.
         np.save(os.path.join(path, "step_counter.npy"), self.step_counter)
 
         # ##: Save the hyperparameters.
-        hyperparams = {
-            "discount_factor": self.discount_factor,
-            "entropy_coef": self.entropy_coef,
-            "value_coef": self.value_coef,
-            "action_space": self.action_space,
-        }
-        np.save(os.path.join(path, "hyperparams.npy"), hyperparams)
+        # Add action_space to the hyperparameters dict before saving
+        save_hyperparams = self.hyperparameters.copy()
+        save_hyperparams["action_space"] = self.action_space
+        np.save(os.path.join(path, "hyperparams.npy"), save_hyperparams)
 
     def load(self, path: str) -> None:
         """
@@ -279,15 +279,17 @@ class A2CAgent(BaseAgent):
         # ##: Load the model.
         self._model = models.load_model(os.path.join(path, "model"))
 
-        # ##: Load the optimizer state.
+        # ##: Load the optimizer state (see note in save method).
         self.step_counter = np.load(os.path.join(path, "step_counter.npy")).item()
 
         # ##: Load the hyperparameters.
-        hyperparams = np.load(os.path.join(path, "hyperparams.npy"), allow_pickle=True).item()
-        self.discount_factor = hyperparams["discount_factor"]
-        self.entropy_coef = hyperparams["entropy_coef"]
-        self.value_coef = hyperparams["value_coef"]
-        self.action_space = hyperparams["action_space"]
+        loaded_hyperparams = np.load(os.path.join(path, "hyperparams.npy"), allow_pickle=True).item()
+        self.action_space = loaded_hyperparams.pop("action_space")  # Extract action_space
+        self.hyperparameters = loaded_hyperparams  # Store the rest
+
+        # Re-initialize optimizer with loaded learning rate
+        self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters["learning_rate"])
+        # Note: Loading full optimizer state might be needed for momentum etc.
 
     @property
     def name(self) -> str:

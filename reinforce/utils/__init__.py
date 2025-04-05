@@ -3,6 +3,7 @@
 Utility functions and classes for reinforcement learning.
 """
 
+from reinforce.utils.aim_logger import AimLogger
 from reinforce.utils.buffers import PrioritizedReplayBuffer, ReplayBuffer
 from reinforce.utils.losses import compute_a2c_loss, huber_loss
 from reinforce.utils.preprocessing import (
@@ -10,7 +11,6 @@ from reinforce.utils.preprocessing import (
     normalize_image,
     preprocess_observation,
 )
-from reinforce.utils.aim_logger import AimLogger
 
 __all__ = [
     "AimLogger",
