@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Preprocessing utilities for observations.
+Image preprocessing utilities for reinforcement learning.
 """
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
 from numpy import ndarray
 
 
-def normalize_image(image: Union[ndarray, tf.Tensor]) -> Union[ndarray, tf.Tensor]:
+def normalize_image(image: Union[np.ndarray, tf.Tensor]) -> Union[np.ndarray, tf.Tensor]:
     """
     Normalize an image to [-1, 1] range.
 
@@ -44,7 +44,7 @@ def preprocess_observation(
 
     Parameters
     ----------
-    observation : np.ndarray | tf.Tensor
+    observation : np.ndarray | tf.Tensors
         Input observation.
     resize_shape : Optional[Tuple[int, int]], optional
         Optional shape to resize the observation to.
@@ -56,7 +56,6 @@ def preprocess_observation(
     """
     observation = normalize_image(observation)
 
-    # ##: Resize if needed.
     if resize_shape is not None:
         if isinstance(observation, tf.Tensor):
             observation = tf.image.resize(observation, resize_shape)
@@ -66,36 +65,3 @@ def preprocess_observation(
             observation = observation_tensor.numpy()
 
     return observation
-
-
-def frame_stack(frames: List[Union[ndarray, tf.Tensor]], num_frames: int = 4) -> Union[ndarray, tf.Tensor]:
-    """
-    Stack multiple frames along the channel dimension.
-
-    Parameters
-    ----------
-    frames : List[np.ndarray | tf.Tensor]
-        List of frames to stack.
-    num_frames : int, optional
-        Number of frames to stack, by default 4.
-
-    Returns
-    -------
-    np.ndarray | tf.Tensor
-        Stacked frames.
-    """
-    if not frames:
-        raise ValueError("Empty frames list provided")
-
-    # ##: Ensure we have enough frames.
-    while len(frames) < num_frames:
-        frames.insert(0, frames[0])
-
-    # ##: Use only the most recent num_frames.
-    if len(frames) > num_frames:
-        frames = frames[-num_frames:]
-
-    # ##: Stack frames.
-    if isinstance(frames[0], tf.Tensor):
-        return tf.concat(frames, axis=-1)
-    return np.concatenate(frames, axis=-1)
