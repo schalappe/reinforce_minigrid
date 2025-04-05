@@ -26,7 +26,7 @@ from optuna.visualization import (
 )
 
 from reinforce.configs import ConfigManager
-from reinforce.experiments import ExperimentRunner
+from reinforce.experiments.experiment_runner import ExperimentRunner
 from reinforce.utils import AimLogger
 
 logger = getLogger(__name__)
@@ -58,8 +58,31 @@ class HyperparameterSearch:
         self.base_config: Optional[Dict[str, Any]] = None
         self.search_name: Optional[str] = None
 
-    def _setup_search_logging(self, search_config_path: Union[str, Path], n_trials: int) -> Optional[AimLogger]:
-        """Initialize AIM logger for the search and log setup parameters."""
+    def _setup_search_logging(self, search_config_path: Union[str, Path], n_trials: int) -> AimLogger:
+        """
+        Initialize AIM logger for the search and log setup parameters.
+
+        Sets up an AimLogger instance to track the hyperparameter search process, logging search configuration
+        details and setup parameters. The logger is configured with an experiment name derived from the search
+        configuration file's stem.
+
+        Parameters
+        ----------
+        search_config_path : Union[str, Path]
+            Path to the hyperparameter search configuration file.
+        n_trials : int
+            Number of trials to run in the hyperparameter search.
+
+        Returns
+        -------
+        AimLogger
+            An AimLogger instance if the initialization was successful.
+
+        Raises
+        ------
+        Exception
+            If there are issues with initializing the AimLogger.
+        """
         search_config_name = Path(search_config_path).stem
         search_aim_logger = AimLogger(
             experiment_name=f"HyperparameterSearch_{search_config_name}",
@@ -83,7 +106,27 @@ class HyperparameterSearch:
         return search_aim_logger
 
     def _load_configs(self, search_config_path: Union[str, Path], search_aim_logger: Optional[AimLogger]) -> None:
-        """Load search and base configurations."""
+        """
+        Load search and base configurations.
+
+        Loads the hyperparameter search configuration and the base experiment configuration. The base configuration
+        can be specified as a file path in the search configuration, or provided inline as a dictionary. If an AimLogger
+        instance is provided, the configurations are logged to AIM for tracking purposes.
+
+        Parameters
+        ----------
+        search_config_path : Union[str, Path]
+            Path to the hyperparameter search configuration file.
+        search_aim_logger : Optional[AimLogger]
+            Optional AimLogger instance for logging.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the search or base configuration file is not found.
+        Exception
+            If there are issues loading the configurations.
+        """
         try:
             self.search_config = self.config_manager.load_config(str(search_config_path))
             if search_aim_logger and search_aim_logger.run and self.search_config:
@@ -108,12 +151,27 @@ class HyperparameterSearch:
         except FileNotFoundError as exc:
             logger.error("Base config file not found: %s", exc)
             raise
-        except Exception as exc:  # Catch other potential config loading errors
+        except Exception as exc:
             logger.error("Error loading base config: %s", exc)
             raise
 
     def _create_or_load_study(self) -> None:
-        """Create or load the Optuna study with storage and pruner."""
+        """
+        Create or load the Optuna study with storage and pruner.
+
+        Creates an Optuna study for hyperparameter optimization, using persistent storage if available and
+        a MedianPruner for early stopping of unpromising trials. The study is loaded from a SQLite database
+        if it exists, allowing the optimization process to be resumed.
+
+        Raises
+        ------
+        RuntimeError
+            If the search name is not set before creating the study.
+        ImportError
+            If the database backend for Optuna storage is not installed.
+        Exception
+            If there are issues creating the study.
+        """
         if not self.search_name:
             raise RuntimeError("Search name not set before creating study.")
 
@@ -140,7 +198,26 @@ class HyperparameterSearch:
             self.study = create_study(study_name=self.search_name, direction="maximize", pruner=pruner)
 
     def _run_optimization(self, n_trials: int, search_aim_logger: Optional[AimLogger]) -> None:
-        """Run the Optuna optimization process."""
+        """
+        Run the Optuna optimization process.
+
+        Executes the Optuna optimization process, sampling hyperparameters and evaluating the objective function
+        for each trial. The optimization process is monitored and any exceptions are logged to AIM, if available.
+
+        Parameters
+        ----------
+        n_trials : int
+            Number of trials to run in the hyperparameter search.
+        search_aim_logger : Optional[AimLogger]
+            Optional AimLogger instance for logging.
+
+        Raises
+        ------
+        RuntimeError
+            If the study is not initialized before running optimization.
+        Exception
+            If the Optuna optimization process fails.
+        """
         if not self.study:
             raise RuntimeError("Study not initialized before running optimization.")
 
@@ -153,7 +230,28 @@ class HyperparameterSearch:
             raise
 
     def _summarize_and_save_results(self, search_aim_logger: Optional[AimLogger]) -> Dict[str, Any]:
-        """Prepare, save, and log the search summary and visualizations."""
+        """
+        Prepare, save, and log the search summary and visualizations.
+
+        Collects the results of the hyperparameter search, including the best trial and all completed trials.
+        The results are saved to a JSON file and logged to AIM, if available. Additionally, visualizations
+        of the optimization process are generated and saved.
+
+        Parameters
+        ----------
+        search_aim_logger : Optional[AimLogger]
+            Optional AimLogger instance for logging.
+
+        Returns
+        -------
+        Dict[str, Any]
+            A dictionary containing the search summary.
+
+        Raises
+        ------
+        RuntimeError
+            If the study is not available for summarization.
+        """
         if not self.study:
             raise RuntimeError("Study not available for summarization.")
 
@@ -214,10 +312,15 @@ class HyperparameterSearch:
         """
         Run a hyperparameter search using Optuna.
 
-        Orchestrates the search process by calling helper methods for logging,
-        config loading, study creation, optimization, and result summarization.
+        Orchestrates the search process by calling helper methods for logging, config loading,
+        study creation, optimization, and result summarization.
 
-        Parameters are passed down to helper methods as needed.
+        Parameters
+        ----------
+        search_config_path : Union[str, Path]
+            Path to the search configuration file.
+        n_trials : int, default=20
+            Number of trials to run.
 
         Returns
         -------
@@ -238,7 +341,7 @@ class HyperparameterSearch:
             search_aim_logger = self._setup_search_logging(search_config_path, n_trials)
             self._load_configs(search_config_path, search_aim_logger)
 
-            # 3. Create or load study
+            # ##: Create or load study.
             self._create_or_load_study()
             self._run_optimization(n_trials, search_aim_logger)
 
@@ -256,7 +359,29 @@ class HyperparameterSearch:
                 search_aim_logger.close()
 
     def _sample_hyperparameters(self, trial: Trial) -> Dict[str, Any]:
-        """Sample hyperparameters for the current trial based on search config."""
+        """
+        Sample hyperparameters for the current trial based on search config.
+
+        Samples hyperparameters from the search space defined in the search configuration ile. The hyperparameters
+        can be categorical, float, or integer, and can be sampled on a log scale.
+
+        Parameters
+        ----------
+        trial : optuna.Trial
+            Current trial object.
+
+        Returns
+        -------
+        Dict[str, Any]
+            A dictionary containing the sampled hyperparameters.
+
+        Raises
+        ------
+        ValueError
+            If the configuration for a parameter is invalid.
+        Exception
+            If there are errors during the sampling process.
+        """
         params = {}
         if not self.search_config or "hyperparameters" not in self.search_config:
             logger.warning("No hyperparameters defined in search config.")
@@ -289,7 +414,34 @@ class HyperparameterSearch:
         return params
 
     def _prepare_trial_config(self, params: Dict[str, Any], trial: Trial) -> tuple[Path, list[str]]:
-        """Prepare and save the configuration for a specific trial."""
+        """
+        Prepare and save the configuration for a specific trial.
+
+        Creates a trial-specific configuration by merging the sampled hyperparameters into the base configuration.
+        The resulting configuration is saved to a YAML file. Additionally, metadata about the trial is added
+        to the configuration.
+
+        Parameters
+        ----------
+        params : Dict[str, Any]
+            Dictionary of sampled hyperparameters for the current trial.
+        trial : optuna.Trial
+            Current trial object.
+
+        Returns
+        -------
+        tuple[Path, list[str]]
+            A tuple containing the path to the saved configuration file and a list of AIM tags.
+
+        Raises
+        ------
+        TypeError
+            If the experiment configuration is not a dictionary.
+        IOError
+            If there are issues saving the configuration file.
+        Exception
+            If there are unexpected errors during the configuration preparation.
+        """
         if not self.base_config:
             logger.warning("No base configuration specified, using empty configuration")
             self.base_config = {}
@@ -332,7 +484,35 @@ class HyperparameterSearch:
         return config_path, list(set(aim_tags))
 
     def _execute_trial(self, trial: Trial, config_path: Path, aim_tags: list[str]) -> float:
-        """Define pruning callback and execute the experiment for the trial."""
+        """
+        Define pruning callback and execute the experiment for the trial.
+
+        Executes a single trial of the reinforcement learning experiment, using the trial-specific configuration.
+        A pruning callback is defined to allow Optuna to prune unpromising trials early.
+
+        Parameters
+        ----------
+        trial : optuna.Trial
+            Current trial object.
+        config_path : Path
+            Path to the trial-specific configuration file.
+        aim_tags : list[str]
+            List of AIM tags for the experiment.
+
+        Returns
+        -------
+        float
+            The objective value (mean reward) for the trial.
+
+        Raises
+        ------
+        TrialPruned
+            If the trial is pruned by the pruning callback.
+        FileNotFoundError
+            If the experiment configuration file is not found.
+        Exception
+            If there are errors during the experiment execution.
+        """
 
         def pruning_callback(step: int, value: float):
             """Inner function for pruning callback."""
@@ -475,7 +655,7 @@ class HyperparameterSearch:
         --------
         >>> base = {"agent": {"lr": 0.01}}
         >>> params = {"agent.lr": 0.001, "env.name": "CartPole"}
-        >>> _create_experiment_config(base, params)
+        >>> HyperparameterSearch._create_experiment_config(base, params)
         {'agent': {'lr': 0.001}, 'env': {'name': 'CartPole'}}
         """
         experiment_config = base_config.copy()

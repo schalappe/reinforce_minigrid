@@ -31,11 +31,6 @@ class ExperimentRunner:
 
     This class sets up and runs reinforcement learning experiments based on configuration files.
     It supports logging via AIM, Optuna pruning, and saving experiment results.
-
-    Attributes
-    ----------
-    config_manager : ConfigManager
-        Manages experiment configurations.
     """
 
     def __init__(self, config_dir: Optional[str] = None):
@@ -55,7 +50,26 @@ class ExperimentRunner:
         pruning_callback: Optional[Callable[[int, float], None]] = None,
         aim_tags: Optional[List[str]] = None,
     ) -> Tuple[Dict[str, Any], EpisodeTrainer, Optional[AimLogger]]:
-        """Helper method to set up the experiment components."""
+        """
+        Set up the experiment components: configuration, environment, agent, trainer and logger.
+
+        This method loads the experiment configuration, initializes the AIM logger, creates the environment and agent
+        based on the configuration, and sets up the trainer with the appropriate configurations.
+
+        Parameters
+        ----------
+        experiment_config_path : Union[str, Path]
+            Path to the experiment configuration file (YAML or JSON).
+        pruning_callback : Callable[[int, float], None, optional
+            Callback function for Optuna pruning. Takes (step, value) parameters.
+        aim_tags : List[str], optional
+            Additional tags for AIM logging.
+
+        Returns
+        -------
+        Tuple[Dict[str, Any], EpisodeTrainer, Optional[AimLogger]]
+            A tuple containing the experiment configuration, the initialized trainer, and the AIM logger.
+        """
         config = self.config_manager.load_experiment_config(str(experiment_config_path))
         experiment_name = Path(experiment_config_path).stem
 
@@ -100,6 +114,9 @@ class ExperimentRunner:
     ) -> Dict[str, Any]:
         """
         Run an experiment using the provided configuration.
+
+        This method sets up an experiment, trains an agent in the environment, logs the results, and saves
+        the experiment results to a file if specified in the configuration.
 
         Parameters
         ----------
@@ -166,6 +183,8 @@ class ExperimentRunner:
         """
         Create an environment based on the configuration.
 
+        This method creates and returns a `MazeEnvironment` instance based on the provided configuration.
+
         Parameters
         ----------
         env_config : Dict[str, Any]
@@ -187,6 +206,9 @@ class ExperimentRunner:
     def _create_agent(agent_config: Dict[str, Any], environment) -> A2CAgent:
         """
         Create an agent based on the configuration.
+
+        This method creates and returns an agent instance based on the provided configuration.
+        Currently, only A2C agents are supported.
 
         Parameters
         ----------
@@ -232,6 +254,9 @@ class ExperimentRunner:
     ) -> EpisodeTrainer:
         """
         Create a trainer based on the configuration.
+
+        This method creates and returns a trainer instance based on the provided configuration.
+        Currently, only `EpisodeTrainer` is supported.
 
         Parameters
         ----------
