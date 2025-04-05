@@ -3,8 +3,6 @@
 Base loss functions for reinforcement learning algorithms.
 """
 
-from typing import Optional, Tuple
-
 import tensorflow as tf
 from keras import losses
 
