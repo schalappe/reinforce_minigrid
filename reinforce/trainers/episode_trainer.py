@@ -11,6 +11,7 @@ from time import time
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
+import tensorflow as tf
 from aim import Distribution
 from loguru import logger
 
@@ -20,6 +21,9 @@ from reinforce.core.base_environment import BaseEnvironment
 from reinforce.core.base_trainer import BaseTrainer
 from reinforce.utils.aim_logger import AimLogger
 from reinforce.utils.logging_setup import setup_logger
+from reinforce.utils.preprocessing import (
+    preprocess_observation,  # Ensure this is imported
+)
 
 setup_logger()
 
@@ -103,15 +107,17 @@ class EpisodeTrainer(BaseTrainer):
             episode_reward = 0
             episode_steps = 0
 
-            # ##: Store experiences for batch updates.
+            # ##: Store experiences for batch updates (store raw obs).
             observations = []
             actions = []
             rewards = []
             next_observations = []
             dones = []
+            agent_infos = []
 
             # ##: Run one episode.
             for step in range(self.config.max_steps_per_episode):
+                # ##: Log environment image periodically (use raw observation).
                 if (
                     self.aim_logger
                     and self.config.log_env_image_frequency > 0
@@ -128,17 +134,18 @@ class EpisodeTrainer(BaseTrainer):
                     except Exception as exc:
                         logger.warning(f"Could not log environment image: {exc}")
 
-                # ##: Run one step in the environment.
+                # ##: Run one step in the environment (using raw observation).
                 next_observation, reward, done, action, agent_info = self._run_episode_step(observation, step)
 
-                # ##: Store experience.
-                observations.append(observation)
+                # ##: Store raw experience.
+                observations.append(observation)  # Store raw observation
                 actions.append(action)
                 rewards.append(reward)
-                next_observations.append(next_observation)
+                next_observations.append(next_observation)  # Store raw next_observation
                 dones.append(done)
+                agent_infos.append(agent_info)  # Store agent info
 
-                # ##: Update state.
+                # ##: Update state (use raw observation for next step).
                 observation = next_observation
                 episode_reward += reward
                 episode_steps += 1
@@ -146,8 +153,8 @@ class EpisodeTrainer(BaseTrainer):
 
                 # ##: Update the agent if it's time.
                 if self.total_steps % self.config.update_frequency == 0 and len(observations) > 0:
-                    self._handle_agent_update(observations, actions, rewards, next_observations, dones, agent_info)
-                    observations, actions, rewards, next_observations, dones = [], [], [], [], []
+                    self._handle_agent_update(observations, actions, rewards, next_observations, dones, agent_infos)
+                    observations, actions, rewards, next_observations, dones, agent_infos = [], [], [], [], [], []
 
                 if done:
                     break
@@ -230,24 +237,27 @@ class EpisodeTrainer(BaseTrainer):
         rewards: List,
         next_observations: List,
         dones: List,
-        agent_info: Dict,
+        agent_infos: List[Dict],  # Takes the list of agent_infos collected
     ) -> None:
-        """Handles the agent learning step and associated logging."""
-        np_observations = np.array(observations)
-        np_actions = np.array(actions)
-        np_rewards = np.array(rewards)
-        np_next_observations = np.array(next_observations)
-        np_dones = np.array(dones)
+        """Handles the agent learning step and associated logging using tf.data."""
+        # ##: Preprocess observations and next_observations here.
+        # ##: Use tf.stack to handle the list of numpy arrays correctly.
+        processed_observations = tf.stack([preprocess_observation(obs) for obs in observations])
+        processed_next_observations = tf.stack([preprocess_observation(n_obs) for n_obs in next_observations])
 
-        experience_batch = {
-            "observations": np_observations,
-            "actions": np_actions,
-            "rewards": np_rewards,
-            "next_observations": np_next_observations,
-            "dones": np_dones,
-        }
+        # ##: Convert other lists to tensors.
+        tf_actions = tf.convert_to_tensor(actions, dtype=tf.int32)
+        tf_rewards = tf.convert_to_tensor(rewards, dtype=tf.float32)
+        tf_dones = tf.convert_to_tensor(dones, dtype=tf.float32)  # Use float for TF compatibility
 
-        learn_info = self.agent.learn(experience_batch)
+        # ##: Pass tensors directly to agent.learn.
+        logger.debug("Calling agent.learn with prepared tensors...")
+        batch_tensors = (processed_observations, tf_actions, tf_rewards, processed_next_observations, tf_dones)
+        learn_info = self.agent.learn(batch_tensors)
+        logger.debug("agent.learn call completed.")
+
+        # ##: Logging needs access to the last agent_info from the batch.
+        last_agent_info = agent_infos[-1] if agent_infos else {}
 
         if not self.aim_logger:
             return
@@ -258,13 +268,13 @@ class EpisodeTrainer(BaseTrainer):
                 learn_info, step=self.total_steps, epoch=self.episode, context={"subset": "train_update"}
             )
 
-        # ##: Log agent action info (e.g., action probabilities).
-        if agent_info and isinstance(agent_info, dict):
-            if "action_probs" in agent_info:
+        # ##: Log agent action info (use last_agent_info).
+        if last_agent_info and isinstance(last_agent_info, dict):
+            if "action_probs" in last_agent_info:
                 try:
                     self.aim_logger.log_metric(
                         name="action_probabilities",
-                        value=Distribution(agent_info["action_probs"]),
+                        value=Distribution(last_agent_info["action_probs"]),
                         step=self.total_steps,
                         epoch=self.episode,
                         context={"subset": "train"},
@@ -272,8 +282,8 @@ class EpisodeTrainer(BaseTrainer):
                 except Exception as exc:
                     logger.warning(f"Could not log action probabilities distribution: {exc}")
 
-            # ##: Log other scalar metrics from agent_info.
-            other_agent_metrics = {k: v for k, v in agent_info.items() if k != "action_probs"}
+            # ##: Log other scalar metrics from last_agent_info.
+            other_agent_metrics = {k: v for k, v in last_agent_info.items() if k != "action_probs"}
             scalar_agent_metrics = {k: v for k, v in other_agent_metrics.items() if np.isscalar(v)}
             if scalar_agent_metrics:
                 self.aim_logger.log_metrics(

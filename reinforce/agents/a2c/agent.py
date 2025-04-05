@@ -88,36 +88,27 @@ class A2CAgent(BaseAgent):
             "action_logits": action_logits[0].numpy(),
         }
 
-    def learn(self, experience_batch: Dict[str, ndarray]) -> Dict[str, Any]:
+    def learn(self, batch_tensors: Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]) -> Dict[str, Any]:
         """
-        Update the agent based on a batch of experiences.
+        Update the agent based on a batch of experiences provided as tensors.
 
         Parameters
         ----------
-        experience_batch : Dict[str, np.ndarray]
-            A dictionary containing batches of experiences:
-            'observations', 'actions', 'rewards', 'next_observations', 'dones'.
+        batch_tensors : Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
+            A tuple containing batches of tensors:
+            (observations, actions, rewards, next_observations, dones).
+            Observations and next_observations are expected to be preprocessed.
 
         Returns
         -------
         Dict[str, Any]
             Dictionary of learning metrics.
         """
-        # ##: Unpack experience batch and preprocess observations.
-        observations = preprocess_observation(experience_batch["observations"])
-        actions = experience_batch["actions"]
-        rewards = experience_batch["rewards"]
-        next_observations = preprocess_observation(experience_batch["next_observations"])
-        dones = experience_batch["dones"]
+        # ##: Unpack tensors from the dataset batch.
+        # ##: Data is already preprocessed and in tensor format.
+        observations, actions, rewards, next_observations, dones = batch_tensors
 
-        # ##: Convert numpy arrays to tensors.
-        observations = tf.convert_to_tensor(observations, dtype=tf.float32)
-        actions = tf.convert_to_tensor(actions, dtype=tf.int32)
-        rewards = tf.convert_to_tensor(rewards, dtype=tf.float32)
-        next_observations = tf.convert_to_tensor(next_observations, dtype=tf.float32)
-        dones = tf.convert_to_tensor(dones, dtype=tf.float32)  # Convert bool to float
-
-        # ##: Compute returns and advantages.
+        # ##: Compute returns and advantages using the input tensors directly.
         returns, advantages = self._compute_returns_and_advantages(rewards, dones, observations, next_observations)
 
         # ##: Perform one training step.
@@ -154,13 +145,20 @@ class A2CAgent(BaseAgent):
 
         # ##: Reshape values for easier calculations.
         values = tf.squeeze(values)
-        next_values = tf.squeeze(next_values)
+        next_values = tf.squeeze(next_values)  # Should be float16 if mixed precision
+
+        # ##: Ensure rewards and dones match the model's compute dtype (e.g., float16)
+        compute_dtype = self._model.compute_dtype
+        rewards = tf.cast(rewards, compute_dtype)
+        dones = tf.cast(dones, compute_dtype)
 
         # ##: Calculate returns using TD(lambda) with lambda=0 (i.e., TD(0)).
-        returns = rewards + self.hyperparameters.discount_factor * next_values * (1.0 - dones)
+        # ##: Ensure discount factor is also cast if necessary (though usually float32 is fine here)
+        discount_factor = tf.cast(self.hyperparameters.discount_factor, compute_dtype)
+        returns = rewards + discount_factor * next_values * (tf.cast(1.0, compute_dtype) - dones)
 
         # ##: Calculate advantages.
-        advantages = returns - values
+        advantages = returns - values  # Now returns and values should both be compute_dtype
 
         return returns, advantages
 

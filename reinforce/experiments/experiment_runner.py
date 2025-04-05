@@ -14,6 +14,7 @@ from time import time
 from traceback import format_exc
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+import tensorflow as tf
 from loguru import logger
 from pydantic import ValidationError
 
@@ -93,6 +94,13 @@ class ExperimentRunner:
         except (FileNotFoundError, ValueError, ValidationError) as e:
             logger.error(f"Failed to load or validate experiment config '{experiment_config_path}': {e}")
             raise ValueError(f"Configuration error: {e}") from e
+
+        # ##: Enable Mixed Precision Training globally.
+        try:
+            tf.keras.mixed_precision.set_global_policy("mixed_float16")
+            logger.info("Mixed precision policy 'mixed_float16' set globally.")
+        except Exception as mp_exc:
+            logger.warning(f"Could not set mixed precision policy: {mp_exc}. Continuing with default precision.")
 
         experiment_name = Path(experiment_config_path).stem
 

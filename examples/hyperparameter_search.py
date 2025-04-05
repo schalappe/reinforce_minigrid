@@ -3,10 +3,9 @@
 """
 Example of running a hyperparameter search using Optuna for the A2C agent.
 
-This example demonstrates how to use the Optuna-based hyperparameter search functionality
-to efficiently optimize different combinations of hyperparameters and find
-the best configuration for an agent, with support for parallel execution,
-pruning of underperforming trials, and visualization.
+This example demonstrates how to use the Optuna-based hyperparameter search functionality to efficiently optimize
+different combinations of hyperparameters and find the best configuration for an agent, with support for parallel
+execution, pruning of underperforming trials, and visualization.
 """
 
 import os
@@ -71,7 +70,7 @@ if __name__ == "__main__":
         base_config = {
             "agent": {
                 "agent_type": "A2C",
-                "action_space": 7,
+                "action_space": 6,
                 "embedding_size": 128,
                 "learning_rate": 0.001,
                 "discount_factor": 0.99,
@@ -85,7 +84,7 @@ if __name__ == "__main__":
                 "trainer_type": "EpisodeTrainer",
                 "max_episodes": 500,  # Reduced for the search
                 "max_steps_per_episode": 100,
-                "update_frequency": 1,
+                "update_frequency": 50,
                 "eval_frequency": 100,
                 "num_eval_episodes": 5,
                 "gamma": 0.99,

@@ -6,6 +6,7 @@ Base interface for all reinforcement learning agents.
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Tuple
 
+import tensorflow as tf
 from numpy import ndarray
 
 
@@ -36,15 +37,15 @@ class BaseAgent(ABC):
         """
 
     @abstractmethod
-    def learn(self, experience_batch: Dict[str, ndarray]) -> Dict[str, Any]:
+    def learn(self, experience_batch: Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]) -> Dict[str, Any]:
         """
         Update the agent based on a batch of experiences.
 
         Parameters
         ----------
-        experience_batch : Dict[str, np.ndarray]
-            A dictionary containing batches of experiences, typically including keys like
-            'observations', 'actions', 'rewards', 'next_observations', and 'dones'.
+        experience_batch : Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
+            A tuple containing batches of tensors:
+            (observations, actions, rewards, next_observations, dones).
 
         Returns
         -------
