@@ -133,10 +133,10 @@ class HyperparameterSearch:
             if search_aim_logger and search_aim_logger.run and self.search_config:
                 search_aim_logger.log_params(self.search_config.get("hyperparameters", {}), prefix="search_space")
         except FileNotFoundError as exc:
-            logger.error("Search config file not found: %s", exc)
+            logger.error(f"Search config file not found: {exc}")
             raise
         except Exception as exc:
-            logger.error("Error loading search config: %s", exc)
+            logger.error(f"Error loading search config: {exc}")
             raise
 
         try:
@@ -150,10 +150,10 @@ class HyperparameterSearch:
                 log_val = str(base_config_source) if isinstance(base_config_source, str) else "inline_dict"
                 search_aim_logger.log_params({"base_config_source": log_val}, prefix="search_setup")
         except FileNotFoundError as exc:
-            logger.error("Base config file not found: %s", exc)
+            logger.error(f"Base config file not found: {exc}")
             raise
         except Exception as exc:
-            logger.error("Error loading base config: %s", exc)
+            logger.error(f"Error loading base config: {exc}")
             raise
 
     def _create_or_load_study(self) -> None:
@@ -188,13 +188,13 @@ class HyperparameterSearch:
                 direction="maximize",
                 pruner=pruner,
             )
-            logger.info("Using persistent storage for study: %s", storage_name)
+            logger.info(f"Using persistent storage for study: {storage_name}")
         except ImportError as exc:
-            logger.error("Database backend for Optuna storage not installed: %s", exc)
+            logger.error(f"Database backend for Optuna storage not installed: {exc}")
             logger.warning("Using in-memory storage instead.")
             self.study = create_study(study_name=self.search_name, direction="maximize", pruner=pruner)
         except Exception as exc:
-            logger.error("Could not create study with persistent storage: %s", exc)
+            logger.error(f"Could not create study with persistent storage: {exc}")
             logger.warning("Using in-memory storage instead.")
             self.study = create_study(study_name=self.search_name, direction="maximize", pruner=pruner)
 
@@ -225,7 +225,7 @@ class HyperparameterSearch:
         try:
             self.study.optimize(self._objective, n_trials=n_trials, show_progress_bar=True)
         except Exception as exc:
-            logger.error("Optuna optimization failed: %s", exc)
+            logger.error(f"Optuna optimization failed: {exc}")
             if search_aim_logger and search_aim_logger.run:
                 search_aim_logger.log_text(f"Optimization failed: {exc}\n{format_exc()}", name="error_log")
             raise
@@ -298,14 +298,14 @@ class HyperparameterSearch:
 
         # ##: Print results.
         logger.info("Hyperparameter search complete!")
-        logger.info("Number of trials: %s", summary["num_completed_trials"])
-        logger.info("Best trial: %s", summary["best_trial_number"])
+        logger.info(f"Number of trials: {summary['num_completed_trials']}")
+        logger.info(f"Best trial: {summary['best_trial_number']}")
         if summary["best_mean_reward"] is not None:
-            logger.info("Best mean reward: %.4f", summary["best_mean_reward"])
+            logger.info(f"Best mean reward: {summary['best_mean_reward']:.4f}")
         else:
             logger.info("Best mean reward: N/A")
-        logger.info("Best hyperparameters: %s", json.dumps(summary["best_hyperparameters"], indent=2))
-        logger.info("Visualization plots saved to: %s", self.results_dir / "visualizations")
+        logger.info(f"Best hyperparameters: {json.dumps(summary['best_hyperparameters'], indent=2)}")
+        logger.info(f"Visualization plots saved to: {self.results_dir / 'visualizations'}")
 
         return summary
 
@@ -350,7 +350,7 @@ class HyperparameterSearch:
 
         except Exception as exc:
             if not isinstance(exc, RuntimeError) or "Optuna optimization failed" not in str(exc):
-                logger.error("Hyperparameter search failed: %s\n%s", exc, format_exc())
+                logger.error(f"Hyperparameter search failed: {exc}\n{format_exc()}")
 
             if search_aim_logger and search_aim_logger.run:
                 search_aim_logger.log_text(f"Search failed: {exc}\n{format_exc()}", name="error_log")
@@ -404,12 +404,12 @@ class HyperparameterSearch:
                         param_path, param_config["low"], param_config["high"], log=log_scale
                     )
                 else:
-                    logger.warning("Unsupported parameter type '%s' for %s", param_type, param_path)
+                    logger.warning(f"Unsupported parameter type '{param_type}' for {param_path}")
             except KeyError as exc:
-                logger.error("Missing required key '%s' for parameter %s in search config.", exc, param_path)
+                logger.error(f"Missing required key '{exc}' for parameter {param_path} in search config.")
                 raise ValueError(f"Invalid config for parameter {param_path}") from exc
             except Exception as exc:
-                logger.error("Error suggesting parameter %s: %s", param_path, exc)
+                logger.error(f"Error suggesting parameter {param_path}: {exc}")
                 raise
 
         return params
@@ -450,9 +450,7 @@ class HyperparameterSearch:
         experiment_config = self._create_experiment_config(self.base_config, params)
         if not isinstance(experiment_config, dict):
             logger.error(
-                "Failed to create a valid dictionary for experiment config. Base: %s, Params: %s",
-                self.base_config,
-                params,
+                f"Failed to create a valid dictionary for experiment config. Base: {self.base_config}, Params: {params}"
             )
             raise TypeError(f"Expected experiment_config to be a dict, got {type(experiment_config)}")
 
@@ -472,15 +470,15 @@ class HyperparameterSearch:
         try:
             self.config_manager.save_config(experiment_config, str(config_path))
         except IOError as exc:
-            logger.error("Failed to save trial config %s: %s", config_path, exc)
+            logger.error(f"Failed to save trial config {config_path}: {exc}")
             raise
         except Exception as exc:
-            logger.error("Unexpected error saving trial config %s: %s", config_path, exc)
+            logger.error(f"Unexpected error saving trial config {config_path}: {exc}")
             raise
 
-        logger.info("\n--- Running Trial %d ---", trial.number)
-        logger.info("Parameters: %s", params)
-        logger.info("AIM Run Name: %s", aim_run_name)
+        logger.info(f"\n--- Running Trial {trial.number} ---")
+        logger.info(f"Parameters: {params}")
+        logger.info(f"AIM Run Name: {aim_run_name}")
 
         return config_path, list(set(aim_tags))
 
@@ -520,12 +518,12 @@ class HyperparameterSearch:
             try:
                 trial.report(value, step)
                 if trial.should_prune():
-                    logger.info("Trial %d pruned at step %d with value %.4f.", trial.number, step, value)
+                    logger.info(f"Trial {trial.number} pruned at step {step} with value {value:.4f}.")
                     raise TrialPruned()
             except TrialPruned:
                 raise
-            except Exception as exc:
-                logger.error("Error in pruning callback for trial %d (step %d): %s", trial.number, step, exc)
+            except Exception as error:
+                logger.error(f"Error in pruning callback for trial {trial.number} (step {step}): {error}")
 
         try:
             experiment_results = self.experiment_runner.run_experiment(
@@ -533,17 +531,17 @@ class HyperparameterSearch:
             )
 
             objective_value = experiment_results.get("final_mean_reward", experiment_results.get("mean_reward", 0.0))
-            logger.info("--- Trial %d Completed ---", trial.number)
-            logger.info("Final Objective Value: %.4f", objective_value)
+            logger.info(f"--- Trial {trial.number} Completed ---")
+            logger.info(f"Final Objective Value: {objective_value:.4f}")
             return objective_value
         except TrialPruned:
-            logger.info("Trial %d was pruned.", trial.number)
+            logger.info(f"Trial {trial.number} was pruned.")
             raise
         except FileNotFoundError as exc:
-            logger.error("Experiment config file not found for trial %d: %s", trial.number, exc)
+            logger.error(f"Experiment config file not found for trial {trial.number}: {exc}")
             return -float("inf")
         except Exception as exc:
-            logger.error("Error running experiment for trial %d: %s\n%s", trial.number, exc, format_exc())
+            logger.error(f"Error running experiment for trial {trial.number}: {exc}\n{format_exc()}")
             return -float("inf")
 
     def _objective(self, trial: Trial) -> float:
@@ -571,7 +569,7 @@ class HyperparameterSearch:
         except TrialPruned:
             raise
         except Exception as exc:
-            logger.error("Critical error in objective function for trial %d: %s\n%s", trial.number, exc, format_exc())
+            logger.error(f"Critical error in objective function for trial {trial.number}: {exc}\n{format_exc()}")
             return -float("inf")
 
     def _save_and_log_visualizations(self, search_aim_logger: Optional[AimLogger]) -> None:
@@ -611,7 +609,7 @@ class HyperparameterSearch:
                 fig = plot_func(self.study)
                 img_path = vis_dir / f"{name}.png"
                 fig.write_image(str(img_path))
-                logger.info("Saved visualization: %s", img_path)
+                logger.info(f"Saved visualization: {img_path}")
 
                 # ##: Log the saved image to the search-level AIM run.
                 if search_aim_logger and search_aim_logger.run:
@@ -620,20 +618,20 @@ class HyperparameterSearch:
                             aim_image = Image(f_img.read(), format="png", caption=f"Optuna {name} plot")
                             search_aim_logger.log_image(aim_image, name=f"optuna_{name}_plot")
                     except FileNotFoundError:
-                        logger.error("Could not find visualization file '%s' to log to AIM.", img_path)
+                        logger.error(f"Could not find visualization file '{img_path}' to log to AIM.")
                     except IOError as io_err:
-                        logger.error("Could not read visualization file '%s' for AIM logging: %s", img_path, io_err)
+                        logger.error(f"Could not read visualization file '{img_path}' for AIM logging: {io_err}")
                     except Exception as aim_exc:
-                        logger.error("Could not log visualization '%s' to AIM: %s", name, aim_exc)
+                        logger.error(f"Could not log visualization '{name}' to AIM: {aim_exc}")
 
             except ImportError:
-                logger.warning("Plotly not installed. Skipping visualization '%s'.", name)
+                logger.warning(f"Plotly not installed. Skipping visualization '{name}'.")
             except ValueError as ve:
-                logger.warning("Could not generate visualization '%s' (possibly insufficient data): %s", name, ve)
+                logger.warning(f"Could not generate visualization '{name}' (possibly insufficient data): {ve}")
             except RuntimeError as rte:
-                logger.error("Runtime error generating visualization '%s': %s", name, rte)
+                logger.error(f"Runtime error generating visualization '{name}': {rte}")
             except Exception as exc:
-                logger.error("An unexpected error occurred during visualization '%s': %s", name, exc)
+                logger.error(f"An unexpected error occurred during visualization '{name}': {exc}")
 
     @staticmethod
     def _create_experiment_config(base_config: Dict[str, Any], hyperparameters: Dict[str, Any]) -> Dict[str, Any]:

@@ -159,7 +159,7 @@ class ExperimentRunner:
             if aim_logger and aim_logger.run:
                 aim_logger.log_metric("experiment_duration_seconds", duration_seconds)
                 aim_logger.log_params({"experiment_duration_readable": f"{duration_seconds:.2f}s"})
-            logger.info("Experiment duration: %f:.2f seconds", duration_seconds)
+            logger.info(f"Experiment duration: {duration_seconds:.2f} seconds")
 
             # ##: Save results if specified.
             if "save_results" in config and config["save_results"]:
@@ -174,7 +174,7 @@ class ExperimentRunner:
             return results
 
         except Exception as exc:
-            logger.error("An error occurred during the experiment: %s", exc)
+            logger.error(f"An error occurred during the experiment: {exc}")
             if aim_logger and aim_logger.run:
                 aim_logger.log_text(f"Experiment failed: {exc}\n{format_exc()}", name="error_log")
                 aim_logger.close()
@@ -317,10 +317,10 @@ def main():
 
     # ##: Print summary of results.
     logger.info("Experiment complete!")
-    logger.info("Episodes: %d", results.get("episodes", 0))
-    logger.info("Total steps: %d", results.get("total_steps", 0))
-    logger.info("Mean reward: %f:.2f", results.get("mean_reward", 0))
-    logger.info("Max reward: %f:.2f", results.get("max_reward", 0))
+    logger.info(f"Episodes: {results.get('episodes', 0)}")
+    logger.info(f"Total steps: {results.get('total_steps', 0)}")
+    logger.info(f"Mean reward: {results.get('mean_reward', 0):.2f}")
+    logger.info(f"Max reward: {results.get('max_reward', 0):.2f}")
 
 
 if __name__ == "__main__":

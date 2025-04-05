@@ -7,7 +7,6 @@ It simplifies initializing runs, logging various data types (parameters, metrics
 managing the run lifecycle.
 """
 
-# Removed: import logging
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -81,7 +80,7 @@ class AimLogger:
     def _initialize_run(self) -> None:
         """Initialize the AIM Run object and set system params."""
         if self._run:
-            logger.warning("AIM Run (%s) already initialized. Skipping re-initialization.", self.run_hash)
+            logger.warning(f"AIM Run ({self.run_hash}) already initialized. Skipping re-initialization.")
             return
 
         try:
@@ -90,7 +89,7 @@ class AimLogger:
                 experiment=self._experiment_name,
                 system_tracking_interval=None,
             )
-            logger.info("AIM Run initialized: Name='%s', Hash='%s'", self._run.name, self.run_hash)
+            logger.info(f"AIM Run initialized: Name='{self._run.name}', Hash='{self.run_hash}'")
 
             # ##: Add tags if provided.
             if self._tags:
@@ -99,16 +98,13 @@ class AimLogger:
                 for tag in new_tags - current_tags:
                     try:
                         self._run.add_tag(tag)
-                        logger.debug("Added tag '%s' to run %s", tag, self.run_hash)
+                        logger.debug(f"Added tag '{tag}' to run {self.run_hash}")
                     except Exception as exc:
-                        logger.error("Failed to add tag '%s' to run %s: %s", tag, self.run_hash, exc)
+                        logger.error(f"Failed to add tag '{tag}' to run {self.run_hash}: {exc}")
 
         except Exception as exc:
             logger.error(
-                "Fatal error initializing AIM Run (Experiment: '%s', Repo: '%s'): %s",
-                self._experiment_name,
-                self._repo_path,
-                exc,
+                f"Fatal error initializing AIM Run (Experiment: '{self._experiment_name}', Repo: '{self._repo_path}'): {exc}",
                 exc_info=True,
             )
             self._run = None
@@ -136,15 +132,15 @@ class AimLogger:
             True if the operation was successful, False otherwise.
         """
         if not self._run:
-            logger.warning("AIM Run not initialized. Cannot perform operation: %s.", description)
+            logger.warning(f"AIM Run not initialized. Cannot perform operation: {description}.")
             return False
         try:
             operation(*args, **kwargs)
-            logger.debug("Successfully performed operation: %s (Run: %s)", description, self.run_hash)
+            logger.debug(f"Successfully performed operation: {description} (Run: {self.run_hash})")
             return True
         except Exception as exc:
             logger.error(
-                "Error performing operation '%s' on AIM Run %s: %s", description, self.run_hash, exc, exc_info=False
+                f"Error performing operation '{description}' on AIM Run {self.run_hash}: {exc}", exc_info=False
             )
             return False
 
@@ -336,7 +332,7 @@ class AimLogger:
         try:
             aim_image = AimImage(image_data, caption=caption)
         except Exception as exc:
-            logger.error("Failed to create aim.Image object for '%s': %s. Skipping log_image.", name, exc)
+            logger.error(f"Failed to create aim.Image object for '{name}': {exc}. Skipping log_image.")
             return
 
         op_desc = f"logging image '{name}' (Step: {step}, Epoch: {epoch})"
@@ -376,7 +372,7 @@ class AimLogger:
         try:
             aim_text = AimText(text_data)
         except Exception as exc:
-            logger.error("Failed to create aim.Text object for '%s': %s. Skipping log_text.", name, exc)
+            logger.error(f"Failed to create aim.Text object for '{name}': {exc}. Skipping log_text.")
             return
 
         op_desc = f"logging text '{name}' (Step: {step}, Epoch: {epoch})"
@@ -394,9 +390,9 @@ class AimLogger:
             run_hash = self.run_hash
             try:
                 self._run.close()
-                logger.info("AIM Run closed successfully: %s", run_hash)
+                logger.info(f"AIM Run closed successfully: {run_hash}")
             except Exception as exc:
-                logger.error("Error closing AIM Run %s: %s", run_hash, exc, exc_info=True)
+                logger.error(f"Error closing AIM Run {run_hash}: {exc}", exc_info=True)
             finally:
                 self._run = None
         else:

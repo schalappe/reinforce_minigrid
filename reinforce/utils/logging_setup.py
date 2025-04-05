@@ -13,7 +13,7 @@ def setup_logger():
     logger.remove()  # Remove default handler to avoid duplicate logs if re-configured
     logger.add(
         sys.stderr,
-        level="DEBUG",
+        level="INFO",
         format=(
             "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
             "<level>{level: <8}</level> | "

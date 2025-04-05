@@ -141,7 +141,7 @@ class EpisodeTrainer(BaseTrainer):
                             caption=f"Episode {self.episode}, Step {step}",
                         )
                     except Exception as exc:
-                        logger.warning("Could not log environment image: %s", exc)
+                        logger.warning(f"Could not log environment image: {exc}")
 
                 # ##: Run one step in the environment.
                 next_observation, reward, done, action, agent_info = self._run_episode_step(observation, step)
@@ -199,9 +199,7 @@ class EpisodeTrainer(BaseTrainer):
         # ##: Final evaluation after training loop
         num_eval_episodes = self.config.get("num_eval_episodes", 5)
         final_eval_metrics = self.evaluate(num_eval_episodes)
-        logger.info(
-            f"Final Evaluation Mean Reward: {final_eval_metrics['mean_reward']:.2f}"
-        )  # Replaced print with logger.info
+        logger.info(f"Final Evaluation Mean Reward: {final_eval_metrics['mean_reward']:.2f}")
         if self.aim_logger:
             self.aim_logger.log_metrics(
                 {f"final_{k}": v for k, v in final_eval_metrics.items() if k != "rewards"},
@@ -233,7 +231,7 @@ class EpisodeTrainer(BaseTrainer):
                     caption=f"Episode {self.episode}, Step {step}",
                 )
             except Exception as exc:
-                logger.warning("Could not log environment image: %s", exc)
+                logger.warning(f"Could not log environment image: {exc}")
 
         # ##: Get action from agent and step environment.
         action, agent_info = self.agent.act(observation)
@@ -287,7 +285,7 @@ class EpisodeTrainer(BaseTrainer):
                         context={"subset": "train"},
                     )
                 except Exception as exc:
-                    logger.warning("Could not log action probabilities distribution: %s", exc)
+                    logger.warning(f"Could not log action probabilities distribution: {exc}")
 
             # ##: Log other scalar metrics from agent_info.
             other_agent_metrics = {k: v for k, v in agent_info.items() if k != "action_probs"}
@@ -333,7 +331,6 @@ class EpisodeTrainer(BaseTrainer):
             mean_eval_reward = eval_metrics["mean_reward"]
             min_r, max_r = eval_metrics["min_reward"], eval_metrics["max_reward"]
 
-            # Replaced print with logger.info
             logger.info(
                 f"Evaluation (Ep {self.episode + 1}) Mean Reward: {mean_eval_reward:.2f} "
                 f"(Min: {min_r:.2f}, Max: {max_r:.2f})"
@@ -355,9 +352,7 @@ class EpisodeTrainer(BaseTrainer):
                 try:
                     self._pruning_callback(self.episode + 1, mean_eval_reward)
                 except Exception as exc:
-                    # Replaced print with logger.warning, using exception info
                     logger.warning(f"Trial pruned at episode {self.episode + 1}: {exc}")
-                    # Consider logger.exception(f"Trial pruned...") if traceback is desired
                     return True
 
         return False
@@ -448,7 +443,7 @@ class EpisodeTrainer(BaseTrainer):
                     "trainer_state_path": str(state_path.resolve()),
                 },
             )
-        logger.info(f"Checkpoint saved to: {path_obj}")  # Replaced print with logger.info
+        logger.info(f"Checkpoint saved to: {path_obj}")
 
     def load_checkpoint(self, path: Union[str, Path]) -> None:
         """
