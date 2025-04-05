@@ -3,18 +3,23 @@
 Episode-based trainer for reinforcement learning agents.
 """
 
-import time
 from collections import deque
 from datetime import datetime
+from logging import getLogger
 from pathlib import Path
 from statistics import mean
+from time import time
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
+from aim import Distribution
 
 from reinforce.core.base_agent import BaseAgent
 from reinforce.core.base_environment import BaseEnvironment
 from reinforce.core.base_trainer import BaseTrainer
+from reinforce.utils.aim_logger import AimLogger
+
+logger = getLogger(__name__)
 
 
 class EpisodeTrainer(BaseTrainer):
@@ -31,6 +36,7 @@ class EpisodeTrainer(BaseTrainer):
         environment: BaseEnvironment,
         config: Dict[str, Any],
         callbacks: Optional[List[Callable]] = None,
+        aim_logger: Optional[AimLogger] = None,
     ):
         """
         Initialize the episode trainer.
@@ -45,10 +51,13 @@ class EpisodeTrainer(BaseTrainer):
             Configuration parameters for training.
         callbacks : list of callable, optional
             Optional callbacks to invoke during training.
+        aim_logger : AimLogger, optional
+            AIM logger instance for experiment tracking.
         """
         self.agent = agent
         self.environment = environment
         self.callbacks = callbacks or []
+        self.aim_logger = aim_logger
 
         # ##: Extract configuration parameters.
         self.max_episodes = config.get("max_episodes", 1000)
@@ -58,6 +67,7 @@ class EpisodeTrainer(BaseTrainer):
         self.num_eval_episodes = config.get("num_eval_episodes", 5)
         self.gamma = config.get("gamma", 0.99)
         self.log_frequency = config.get("log_frequency", 1)
+        self.log_env_image_frequency = config.get("log_env_image_frequency", 0)
         self.save_frequency = config.get("save_frequency", 100)
         self.save_dir = Path(config.get("save_dir", Path("outputs") / "models"))
 
@@ -73,8 +83,24 @@ class EpisodeTrainer(BaseTrainer):
         self.total_steps = 0
         self.episode_rewards = deque(maxlen=100)
 
-        # ##: Timestamp for saving models.
+        # ##: Timestamp for saving models (can be useful even with AIM).
         self.timestamp = int(datetime.now().timestamp())
+
+        # ##: Log hyperparameters to AIM if logger is provided.
+        if self.aim_logger:
+            trainer_hparams = {
+                "max_episodes": self.max_episodes,
+                "max_steps_per_episode": self.max_steps_per_episode,
+                "update_frequency": self.update_frequency,
+                "eval_frequency": self.eval_frequency,
+                "num_eval_episodes": self.num_eval_episodes,
+                "gamma": self.gamma,
+                "log_frequency": self.log_frequency,
+                "log_env_image_frequency": self.log_env_image_frequency,
+                "save_frequency": self.save_frequency,
+                "save_dir": str(self.save_dir),
+            }
+            self.aim_logger.log_params(trainer_hparams, prefix="trainer")
 
     def train(self) -> Dict[str, Any]:
         """
@@ -85,7 +111,7 @@ class EpisodeTrainer(BaseTrainer):
         Dict[str, Any]
             Dictionary of training metrics.
         """
-        start_time = time.time()
+        start_time = time()
 
         for self.episode in range(self.episode, self.max_episodes):
             observation = self.environment.reset()
@@ -103,7 +129,25 @@ class EpisodeTrainer(BaseTrainer):
 
             # ##: Run one episode.
             for step in range(self.max_steps_per_episode):
-                action, _ = self.agent.act(observation)
+                # ##: Log environment image periodically.
+                if (
+                    self.aim_logger
+                    and self.log_env_image_frequency > 0
+                    and self.total_steps % self.log_env_image_frequency == 0
+                ):
+                    try:
+                        self.aim_logger.log_image(
+                            observation,
+                            name="environment_observation",
+                            step=self.total_steps,
+                            epoch=self.episode,
+                            caption=f"Episode {self.episode}, Step {step}",
+                        )
+                    except Exception as exc:
+                        logger.warning("Could not log environment image: %s", exc)
+
+                # ##: Get action from agent.
+                action, agent_info = self.agent.act(observation)
                 next_observation, reward, done, _ = self.environment.step(action)
 
                 # ##: Store the experience.
@@ -127,7 +171,39 @@ class EpisodeTrainer(BaseTrainer):
                     np_next_observations = np.array(next_observations)
                     np_dones = np.array(dones)
 
-                    self.agent.learn(np_observations, np_actions, np_rewards, np_next_observations, np_dones)
+                    # ##: Agent learning step.
+                    learn_info = self.agent.learn(
+                        np_observations, np_actions, np_rewards, np_next_observations, np_dones
+                    )
+
+                    # ##: Log agent learning info if available and logger exists.
+                    if self.aim_logger and learn_info and isinstance(learn_info, dict):
+                        self.aim_logger.log_metrics(
+                            learn_info, step=self.total_steps, epoch=self.episode, context={"subset": "train_update"}
+                        )
+
+                    # ##: Log action distribution if available.
+                    if self.aim_logger and agent_info and isinstance(agent_info, dict):
+                        if "action_probs" in agent_info:
+                            try:
+                                self.aim_logger.log_metric(
+                                    name="action_probabilities",
+                                    value=Distribution(agent_info["action_probs"]),
+                                    step=self.total_steps,
+                                    epoch=self.episode,
+                                    context={"subset": "train"},
+                                )
+                            except Exception as exc:
+                                logger.warning("Could not log action probabilities distribution: %s", exc)
+
+                        other_agent_metrics = {k: v for k, v in agent_info.items() if k != "action_probs"}
+                        if other_agent_metrics:
+                            self.aim_logger.log_metrics(
+                                other_agent_metrics,
+                                step=self.total_steps,
+                                epoch=self.episode,
+                                context={"subset": "train_action"},
+                            )
 
                     observations = []
                     actions = []
@@ -138,30 +214,67 @@ class EpisodeTrainer(BaseTrainer):
                 if done:
                     break
 
-            # ##: Store the episode reward.
+            # ##: Store the episode reward for running mean calculation.
             self.episode_rewards.append(episode_reward)
+            mean_reward_100 = mean(self.episode_rewards) if self.episode_rewards else 0
 
-            # ##: Log training progress.
+            # ##: Log training progress (console).
             if (self.episode + 1) % self.log_frequency == 0:
-                self._log_progress(episode_reward, episode_steps, start_time)
+                self._log_progress(episode_reward, episode_steps, mean_reward_100, start_time)
 
-            # ##: Evaluate the agent.
+            # ##: Log metrics to AIM.
+            if self.aim_logger:
+                self.aim_logger.log_metric(
+                    "episode_reward",
+                    episode_reward,
+                    step=self.total_steps,
+                    epoch=self.episode + 1,
+                    context={"subset": "train"},
+                )
+                self.aim_logger.log_metric(
+                    "episode_steps",
+                    episode_steps,
+                    step=self.total_steps,
+                    epoch=self.episode + 1,
+                    context={"subset": "train"},
+                )
+                self.aim_logger.log_metric(
+                    "mean_reward_100",
+                    mean_reward_100,
+                    step=self.total_steps,
+                    epoch=self.episode + 1,
+                    context={"subset": "train"},
+                )
+
+            # ##: Evaluate the agent periodically.
             if (self.episode + 1) % self.eval_frequency == 0:
-                eval_rewards = self.evaluate(self.num_eval_episodes)
-                mean_reward = eval_rewards["mean_reward"]
+                eval_metrics = self.evaluate(self.num_eval_episodes)
+                mean_eval_reward = eval_metrics["mean_reward"]
 
                 print(
-                    f"Evaluation reward: {mean_reward:.2f} "
-                    f"(min: {eval_rewards['min_reward']:.2f}, max: {eval_rewards['max_reward']:.2f})"
+                    f"Evaluation (Ep {self.episode + 1}) Mean Reward: {mean_eval_reward:.2f} "
+                    f"(Min: {eval_metrics['min_reward']:.2f}, Max: {eval_metrics['max_reward']:.2f})"
                 )
+
+                # ##: Log evaluation metrics to AIM.
+                if self.aim_logger:
+                    self.aim_logger.log_metrics(
+                        {
+                            "eval_mean_reward": mean_eval_reward,
+                            "eval_max_reward": eval_metrics["max_reward"],
+                            "eval_min_reward": eval_metrics["min_reward"],
+                        },
+                        step=self.total_steps,
+                        epoch=self.episode + 1,
+                        context={"subset": "eval"},
+                    )
 
                 # ##: Report to Optuna for pruning if this is a trial.
                 if self._pruning_callback is not None and self._trial_info is not None:
                     try:
-                        self._pruning_callback(self.episode + 1, mean_reward)
+                        self._pruning_callback(self.episode + 1, mean_eval_reward)
                     except Exception as e:
                         print(f"Trial pruned at episode {self.episode + 1}: {e}")
-                        # Return current results if pruned
                         return {
                             "pruned": True,
                             "episodes": self.episode + 1,
@@ -170,15 +283,29 @@ class EpisodeTrainer(BaseTrainer):
                             "max_reward": max(self.episode_rewards) if self.episode_rewards else 0,
                         }
 
-            # ##: Save the agent.
+            # ##: Save the agent checkpoint.
             if (self.episode + 1) % self.save_frequency == 0:
-                self.save_checkpoint(
+                checkpoint_path = (
                     self.save_dir / f"{self.agent.name}_{self.environment.name}_{self.timestamp}_{self.episode + 1}"
                 )
+                self.save_checkpoint(checkpoint_path)
 
             # ##: Invoke callbacks.
             for callback in self.callbacks:
-                callback(self, self.episode, episode_reward, episode_steps)
+                callback(
+                    trainer=self, episode=self.episode, episode_reward=episode_reward, episode_steps=episode_steps
+                )
+
+        # ##: Final evaluation after training loop
+        final_eval_metrics = self.evaluate(self.num_eval_episodes)
+        print(f"Final Evaluation Mean Reward: {final_eval_metrics['mean_reward']:.2f}")
+        if self.aim_logger:
+            self.aim_logger.log_metrics(
+                {f"final_{k}": v for k, v in final_eval_metrics.items() if k != "rewards"},
+                step=self.total_steps,
+                epoch=self.episode + 1,
+            )
+            self.aim_logger.log_params({"final_total_steps": self.total_steps, "final_episodes": self.episode + 1})
 
         return {
             "episodes": self.episode + 1,
@@ -204,31 +331,33 @@ class EpisodeTrainer(BaseTrainer):
             Dictionary of evaluation metrics.
         """
         eval_rewards = []
+        eval_steps = []
 
-        for episode in range(num_episodes):
+        for _ in range(num_episodes):
             observation = self.environment.reset()
-
             episode_reward = 0
+            episode_steps = 0
 
-            # ##: Run one episode.
-            for step in range(self.max_steps_per_episode):
+            # ##: Run one evaluation episode.
+            for _ in range(self.max_steps_per_episode):
                 action, _ = self.agent.act(observation, training=False)
-
                 next_observation, reward, done, _ = self.environment.step(action)
 
                 observation = next_observation
                 episode_reward += reward
+                episode_steps += 1
 
                 if done:
                     break
 
-            # ##: Store the episode reward.
             eval_rewards.append(episode_reward)
+            eval_steps.append(episode_steps)
 
         return {
             "mean_reward": mean(eval_rewards) if eval_rewards else 0,
             "max_reward": max(eval_rewards) if eval_rewards else 0,
             "min_reward": min(eval_rewards) if eval_rewards else 0,
+            "mean_steps": mean(eval_steps) if eval_steps else 0,
             "rewards": eval_rewards,
         }
 
@@ -239,14 +368,14 @@ class EpisodeTrainer(BaseTrainer):
         Parameters
         ----------
         path : str | Path
-            Directory path to save the training state.
+            Base path for the checkpoint (directory will be created).
         """
-        # ##: Create directory if it doesn't exist.
         path_obj = Path(path)
         path_obj.mkdir(parents=True, exist_ok=True)
+        agent_path = path_obj / "agent"
 
         # ##: Save the agent.
-        self.agent.save(str(path_obj / "agent"))
+        self.agent.save(str(agent_path))
 
         # ##: Save trainer state.
         trainer_state = {
@@ -254,7 +383,23 @@ class EpisodeTrainer(BaseTrainer):
             "total_steps": self.total_steps,
             "timestamp": self.timestamp,
         }
-        np.save(path_obj / "trainer_state.npy", np.array([trainer_state], dtype=object))
+        state_path = path_obj / "trainer_state.npy"
+        np.save(state_path, np.array([trainer_state], dtype=object))
+
+        # ##: Log checkpoint artifact info to AIM.
+        if self.aim_logger:
+            self.aim_logger.log_artifact(
+                artifact_data=trainer_state,
+                name=f"checkpoint_ep{self.episode + 1}",
+                path=str(path_obj.resolve()),
+                meta={
+                    "episode": self.episode + 1,
+                    "total_steps": self.total_steps,
+                    "agent_save_path": str(agent_path.resolve()),
+                    "trainer_state_path": str(state_path.resolve()),
+                },
+            )
+        print(f"Checkpoint saved to: {path_obj}")
 
     def load_checkpoint(self, path: Union[str, Path]) -> None:
         """
@@ -272,29 +417,29 @@ class EpisodeTrainer(BaseTrainer):
         trainer_state = np.load(path_obj / "trainer_state.npy", allow_pickle=True).item()
         self.episode = trainer_state["episode"]
         self.total_steps = trainer_state["total_steps"]
-        self.timestamp = trainer_state["timestamp"]
+        self.timestamp = trainer_state.get("timestamp", self.timestamp)
 
-    def _log_progress(self, episode_reward: float, episode_steps: int, start_time: float) -> None:
+    def _log_progress(
+        self, episode_reward: float, episode_steps: int, mean_reward_100: float, start_time: float
+    ) -> None:
         """
-        Log training progress.
+        Log training progress to the console.
 
-        Parameters
-        ----------
-        episode_reward : float
             Reward of the current episode.
         episode_steps : int
             Number of steps in the current episode.
+        mean_reward_100 : float
+            Mean reward over the last 100 episodes.
         start_time : float
             Time when training started.
         """
-        elapsed_time = time.time() - start_time
-        mean_reward = mean(self.episode_rewards) if self.episode_rewards else 0
+        elapsed_time = time() - start_time
 
         print(
-            f"Episode {self.episode + 1}/{self.max_episodes} "
+            f"Ep {self.episode + 1}/{self.max_episodes} "
             f"| Steps: {episode_steps} "
             f"| Reward: {episode_reward:.2f} "
-            f"| Mean Reward: {mean_reward:.2f} "
+            f"| Mean Rwd (100): {mean_reward_100:.2f} "
             f"| Total Steps: {self.total_steps} "
             f"| Time: {elapsed_time:.2f}s"
         )

@@ -11,8 +11,6 @@ pruning of underperforming trials, and visualization.
 
 import os
 import argparse
-import json
-import yaml
 
 from reinforce.configs import ConfigManager
 from reinforce.experiments import HyperparameterSearch
@@ -46,8 +44,8 @@ def main(search_config_path, n_trials=20, n_jobs=-1, timeout=None):
     
     # Print results
     print("\nHyperparameter Search Results:")
-    print(f"Number of experiments: {results['num_experiments']}")
-    print(f"Best experiment: {results['best_experiment']}")
+    print(f"Number of experiments: {results['num_completed_trials']}")
+    print(f"Best experiment: {results['best_trial_number']}")
     print(f"Best mean reward: {results['best_mean_reward']:.4f}")
     print("\nBest hyperparameters:")
     for param, value in results['best_hyperparameters'].items():

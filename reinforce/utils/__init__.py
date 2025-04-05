@@ -10,8 +10,10 @@ from reinforce.utils.preprocessing import (
     normalize_image,
     preprocess_observation,
 )
+from reinforce.utils.aim_logger import AimLogger
 
 __all__ = [
+    "AimLogger",
     "normalize_image",
     "preprocess_observation",
     "frame_stack",

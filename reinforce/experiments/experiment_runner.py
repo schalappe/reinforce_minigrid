@@ -1,16 +1,27 @@
 # -*- coding: utf-8 -*-
 """
 Experiment runner for reinforcement learning experiments.
+
+This module provides the `ExperimentRunner` class, which orchestrates the execution of reinforcement
+learning experiments. It handles configuration loading, environment setup, agent initialization,
+training, and logging (via AIM).
 """
 
+from time import time
 from argparse import ArgumentParser
+from logging import getLogger
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Union
+from traceback import format_exc
+from typing import Any, Callable, Dict, List, Optional, Union
 
-from reinforce.agents.a2c import A2CAgent
+from reinforce.agents import A2CAgent
 from reinforce.configs import ConfigManager
+from reinforce.core import BaseAgent, BaseEnvironment
 from reinforce.environments import MazeEnvironment
-from reinforce.trainers.episode_trainer import EpisodeTrainer
+from reinforce.trainers import EpisodeTrainer
+from reinforce.utils import AimLogger
+
+logger = getLogger(__name__)
 
 
 class ExperimentRunner:
@@ -18,6 +29,12 @@ class ExperimentRunner:
     Runner for reinforcement learning experiments.
 
     This class sets up and runs reinforcement learning experiments based on configuration files.
+    It supports logging via AIM, Optuna pruning, and saving experiment results.
+
+    Attributes
+    ----------
+    config_manager : ConfigManager
+        Manages experiment configurations.
     """
 
     def __init__(self, config_dir: Optional[str] = None):
@@ -27,60 +44,115 @@ class ExperimentRunner:
         Parameters
         ----------
         config_dir : str, optional
-            Directory containing configuration files.
+            Directory containing configuration files. If None, defaults to built-in configurations.
         """
         self.config_manager = ConfigManager(config_dir)
 
     def run_experiment(
-        self, experiment_config_path: Union[str, Path], pruning_callback: Optional[Callable[[int, float], None]] = None
+        self,
+        experiment_config_path: Union[str, Path],
+        pruning_callback: Optional[Callable[[int, float], None]] = None,
+        aim_tags: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
-        Run an experiment.
+        Run an experiment using the provided configuration.
 
         Parameters
         ----------
         experiment_config_path : str | Path
-            Path to the experiment configuration file.
+            Path to the experiment configuration file (YAML or JSON).
         pruning_callback : callable, optional
             Callback function for Optuna pruning. Takes (step, value) parameters.
+        aim_tags : List[str], optional
+            Additional tags for AIM logging.
 
         Returns
         -------
         Dict[str, Any]
-            Dictionary of experiment results.
+            Dictionary of experiment results, including:
+            - episodes: Total number of episodes run.
+            - total_steps: Total steps taken.
+            - mean_reward: Average reward per episode.
+            - max_reward: Maximum reward achieved.
+
+        Raises
+        ------
+        Exception
+            If any error occurs during experiment execution.
         """
-        # ##: Load experiment configuration.
-        config = self.config_manager.load_experiment_config(str(experiment_config_path))
+        start_time = time()
+        aim_logger = None
 
-        # ##: Check if this is an Optuna trial.
-        trial_info = config.get("_trial_info", None)
-
-        # ##: Set up the environment, agent, and trainer.
-        environment = self._create_environment(config.get("environment", {}))
-        agent = self._create_agent(config.get("agent", {}), environment)
-
-        # ## Add pruning support to trainer config if needed.
-        trainer_config = config.get("trainer", {}).copy()
-        if trial_info is not None:
-            trainer_config["_trial_info"] = trial_info
-            trainer_config["_pruning_callback"] = pruning_callback
-
-        trainer = self._create_trainer(trainer_config, agent, environment)
-
-        # ##: Run the experiment.
-        results = trainer.train()
-
-        # ##: Save results if specified.
-        if "save_results" in config and config["save_results"]:
-            results_dir = Path(config.get("results_dir", "outputs/results"))
-            results_dir.mkdir(parents=True, exist_ok=True)
-
+        try:
+            # ##: Load experiment configuration.
+            config = self.config_manager.load_experiment_config(str(experiment_config_path))
             experiment_name = Path(experiment_config_path).stem
-            results_path = results_dir / f"{experiment_name}_results.json"
 
-            self.config_manager.save_config(results, str(results_path))
+            # ##: Initialize AIM Logger.
+            base_tags = ["reinforce", config.get("agent", {}).get("agent_type", "unknown_agent")]
+            if aim_tags:
+                base_tags.extend(aim_tags)
 
-        return results
+            aim_logger = AimLogger(
+                experiment_name=config.get("aim_experiment_name", experiment_name),
+                tags=list(set(base_tags))
+            )
+
+            if not aim_logger.run:
+                logger.info("Failed to initialize AIM logger. Proceeding without AIM tracking.")
+            else:
+                aim_logger.log_params(config, prefix="experiment_config")
+                aim_logger.log_params(config.get("agent", {}), prefix="agent_config")
+                aim_logger.log_params(config.get("environment", {}), prefix="env_config")
+
+            # ##: Check if this is an Optuna trial.
+            trial_info = config.get("_trial_info", None)
+
+            # ##: Set up the environment, agent, and trainer.
+            environment = self._create_environment(config.get("environment", {}))
+            agent = self._create_agent(config.get("agent", {}), environment)
+
+            # ## Add pruning support to trainer config if needed.
+            trainer_config = config.get("trainer", {}).copy()
+            if trial_info is not None:
+                trainer_config["_trial_info"] = trial_info
+                trainer_config["_pruning_callback"] = pruning_callback
+
+            trainer = self._create_trainer(trainer_config, agent, environment, aim_logger)
+
+            # ##: Run the training.
+            results = trainer.train()
+
+            # ##: Calculate and log duration.
+            end_time = time()
+            duration_seconds = end_time - start_time
+            if aim_logger and aim_logger.run:
+                aim_logger.log_metric("experiment_duration_seconds", duration_seconds)
+                aim_logger.log_params({"experiment_duration_readable": f"{duration_seconds:.2f}s"})
+            logger.info("Experiment duration: %f:.2f seconds", duration_seconds)
+
+            # ##: Save results if specified.
+            if "save_results" in config and config["save_results"]:
+                results_dir = Path(config.get("results_dir", "outputs/results"))
+                results_dir.mkdir(parents=True, exist_ok=True)
+
+                experiment_name = Path(experiment_config_path).stem
+                results_path = results_dir / f"{experiment_name}_results.json"
+
+                self.config_manager.save_config(results, str(results_path))
+
+            return results
+
+        except Exception as exc:
+            logger.error("An error occurred during the experiment: %s", exc)
+            if aim_logger and aim_logger.run:
+                aim_logger.log_text(f"Experiment failed: {exc}\n{format_exc()}", name="error_log")
+            raise
+
+        finally:
+            # ##: Ensure AIM run is closed.
+            if aim_logger:
+                aim_logger.close()
 
     @staticmethod
     def _create_environment(env_config: Dict[str, Any]) -> MazeEnvironment:
@@ -96,6 +168,10 @@ class ExperimentRunner:
         -------
         MazeEnvironment
             Created environment.
+
+        Notes
+        -----
+        Currently only supports `MazeEnvironment`.
         """
         use_image_obs = env_config.get("use_image_obs", True)
         return MazeEnvironment(use_image_obs=use_image_obs)
@@ -137,7 +213,12 @@ class ExperimentRunner:
         raise ValueError(f"Unsupported agent type: {agent_type}")
 
     @staticmethod
-    def _create_trainer(trainer_config: Dict[str, Any], agent, environment) -> EpisodeTrainer:
+    def _create_trainer(
+        trainer_config: Dict[str, Any],
+        agent: BaseAgent,
+        environment: BaseEnvironment,
+        aim_logger: Optional[AimLogger] = None,
+    ) -> EpisodeTrainer:
         """
         Create a trainer based on the configuration.
 
@@ -149,6 +230,8 @@ class ExperimentRunner:
             Agent to train.
         environment : Environment
             Environment to train in.
+        aim_logger : AimLogger, optional
+            Logger for tracking metrics.
 
         Returns
         -------
@@ -163,7 +246,7 @@ class ExperimentRunner:
         trainer_type = trainer_config.get("trainer_type", "EpisodeTrainer")
 
         if trainer_type == "EpisodeTrainer":
-            return EpisodeTrainer(agent=agent, environment=environment, config=trainer_config)
+            return EpisodeTrainer(agent=agent, environment=environment, config=trainer_config, aim_logger=aim_logger)
 
         raise ValueError(f"Unsupported trainer type: {trainer_type}")
 
@@ -171,25 +254,40 @@ class ExperimentRunner:
 def main():
     """
     Run an experiment from the command line.
+
+    Usage:
+        python experiment_runner.py <config_path> [--config-dir <dir>] [--run-name <name>] [--tags <tag1> <tag2> ...]
+
+    Example:
+        python experiment_runner.py examples/configs/a2c_maze.yaml --tags baseline test
     """
     # ##: Parse command line arguments.
     parser = ArgumentParser(description="Run a reinforcement learning experiment")
-    parser.add_argument("config", help="Path to the experiment configuration file")
-    parser.add_argument("--config-dir", help="Directory containing configuration files")
+    parser.add_argument(
+        "config", help="Path to the experiment configuration file (e.g., examples/configs/a2c_maze.yaml)"
+    )
+    parser.add_argument("--config-dir", help="Directory containing base configuration files")
+    parser.add_argument("--run-name", help="Custom name for the AIM run")
+    parser.add_argument("--tags", nargs="+", help="Additional tags for the AIM run (e.g., --tags baseline test)")
     args = parser.parse_args()
 
     # ##: Create experiment runner.
     runner = ExperimentRunner(args.config_dir)
 
-    # ##: Run the experiment.
-    results = runner.run_experiment(args.config)
+    # ##: Run the experiment with optional AIM args.
+    try:
+        results = runner.run_experiment(args.config, aim_tags=args.tags)
+    except Exception as exc:
+        logger.error("Experiment failed in main: %s", exc)
+        logger.error(format_exc())
+        exit(1)
 
     # ##: Print summary of results.
-    print("Experiment complete!")
-    print(f"Episodes: {results.get('episodes', 0)}")
-    print(f"Total steps: {results.get('total_steps', 0)}")
-    print(f"Mean reward: {results.get('mean_reward', 0):.2f}")
-    print(f"Max reward: {results.get('max_reward', 0):.2f}")
+    logger.info("Experiment complete!")
+    logger.info("Episodes: %d", results.get("episodes", 0))
+    logger.info("Total steps: %d", results.get("total_steps", 0))
+    logger.info("Mean reward: %f:.2f", results.get("mean_reward", 0))
+    logger.info("Max reward: %f:.2f", results.get("max_reward", 0))
 
 
 if __name__ == "__main__":

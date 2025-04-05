@@ -1,15 +1,23 @@
 # -*- coding: utf-8 -*-
 """
 Hyperparameter search for reinforcement learning experiments using Optuna.
+
+This module provides a class for running hyperparameter optimization studies using the Optuna framework.
+It supports parallel execution, pruning of underperforming trials, and visualization of results.
 """
 
 import json
-import multiprocessing
 from argparse import ArgumentParser
+from logging import getLogger
 from pathlib import Path
+from traceback import format_exc
 from typing import Any, Dict, Optional, Union
 
-import optuna
+from aim import Image
+from optuna import Study, create_study
+from optuna.exceptions import TrialPruned
+from optuna.pruners import MedianPruner
+from optuna.trial import Trial, TrialState
 from optuna.visualization import (
     plot_contour,
     plot_optimization_history,
@@ -18,7 +26,10 @@ from optuna.visualization import (
 )
 
 from reinforce.configs import ConfigManager
-from reinforce.experiments.experiment_runner import ExperimentRunner
+from reinforce.experiments import ExperimentRunner
+from reinforce.utils import AimLogger
+
+logger = getLogger(__name__)
 
 
 class HyperparameterSearch:
@@ -36,16 +47,17 @@ class HyperparameterSearch:
         Parameters
         ----------
         config_dir : str, optional
-            Directory containing configuration files.
+            Directory containing configuration files. If None, default paths are used.
         """
         self.config_manager = ConfigManager(config_dir)
         self.experiment_runner = ExperimentRunner(config_dir)
         self.results_dir = Path("outputs/hyperparameter_search")
         self.results_dir.mkdir(parents=True, exist_ok=True)
-        self.study = None
-        self.search_config = None
-        self.base_config = None
-        self.search_name = None
+        self.study: Optional[Study] = None
+        self.search_config: Optional[Dict[str, Any]] = None
+        self.base_config: Optional[Dict[str, Any]] = None
+        self.search_name: Optional[str] = None
+        self.search_aim_logger: Optional[AimLogger] = None
 
     def run_search(
         self, search_config_path: Union[str, Path], n_trials: int = 20, n_jobs: int = -1, timeout: Optional[int] = None
@@ -62,38 +74,93 @@ class HyperparameterSearch:
         n_jobs : int, optional
             Number of parallel jobs. -1 means using all available cores, by default -1.
         timeout : int, optional
-            Timeout in seconds. None means no timeout, by default ``None``.
+            Timeout in seconds. None means no timeout, by default None.
 
         Returns
         -------
         Dict[str, Any]
-            Dictionary of search results.
+            Dictionary containing search results including:
+            - num_completed_trials: Number of successfully completed trials
+            - best_trial_number: Index of the best performing trial
+            - best_mean_reward: Best mean reward achieved
+            - best_hyperparameters: Parameters of the best trial
+            - all_completed_trials: List of all completed trials
+            - study_name: Name of the Optuna study
+            - direction: Optimization direction ('maximize' or 'minimize')
+
+        Raises
+        ------
+        FileNotFoundError
+            If the search configuration file is not found.
+        ValueError
+            If the search configuration is invalid.
+        RuntimeError
+            If the Optuna study fails to initialize or optimize.
         """
+        # ##: Initialize AIM logger for the overall search process.
+        search_config_name = Path(search_config_path).stem
+        self.search_aim_logger = AimLogger(
+            experiment_name=f"HyperparameterSearch_{search_config_name}",
+            tags=["hyperparameter-search", "summary", search_config_name],
+        )
+
+        # ##: Log search setup parameters.
+        if self.search_aim_logger.run:
+            self.search_aim_logger.log_params(
+                {
+                    "search_config_path": str(search_config_path),
+                    "n_trials": n_trials,
+                    "n_jobs": n_jobs,
+                    "timeout": timeout,
+                    "search_name": search_config_name,
+                },
+                prefix="search_setup",
+            )
+        else:
+            logger.warning("Failed to initialize AIM logger for search summary.")
+
         # ##: Load search configuration.
-        self.search_config = self.config_manager.load_config(str(search_config_path))
-        self.search_name = Path(search_config_path).stem
+        try:
+            self.search_config = self.config_manager.load_config(str(search_config_path))
+            self.search_name = search_config_name
+
+            if self.search_aim_logger.run and self.search_config:
+                self.search_aim_logger.log_params(self.search_config.get("hyperparameters", {}), prefix="search_space")
+
+        except Exception as exc:
+            logger.error("Error loading search config: %s", exc)
+            if self.search_aim_logger:
+                self.search_aim_logger.close()
+            raise
 
         # ##: Load base configuration.
-        base_config = self.search_config.get("base_config", {})
-        if isinstance(base_config, str):
-            self.base_config = self.config_manager.load_config(str(base_config))
-        else:
-            self.base_config = base_config if base_config else {}
+        try:
+            base_config_source = self.search_config.get("base_config", {})
+            if isinstance(base_config_source, str):
+                self.base_config = self.config_manager.load_config(str(base_config_source))
+            else:
+                self.base_config = base_config_source if base_config_source else {}
 
-        # ##: Set actual number of jobs (handle -1 case).
-        if n_jobs == -1:
-            n_jobs = multiprocessing.cpu_count()
+            if self.search_aim_logger.run:
+                log_val = str(base_config_source) if isinstance(base_config_source, str) else "inline_dict"
+                self.search_aim_logger.log_params({"base_config_source": log_val}, prefix="search_setup")
+
+        except Exception as exc:
+            logger.error("Error loading base config: %s", exc)
+            if self.search_aim_logger:
+                self.search_aim_logger.close()
+            raise
 
         # ##: Configure storage for study persistence.
         self.results_dir.mkdir(parents=True, exist_ok=True)
         storage_name = f"sqlite:///{self.results_dir}/{self.search_name}.db"
 
         # ##: Setup pruning.
-        pruner = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=30, interval_steps=10)
+        pruner = MedianPruner(n_startup_trials=5, n_warmup_steps=30, interval_steps=10)
 
         # ##: Create study.
         try:
-            self.study = optuna.create_study(
+            self.study = create_study(
                 study_name=self.search_name,
                 storage=storage_name,
                 load_if_exists=True,
@@ -101,26 +168,39 @@ class HyperparameterSearch:
                 pruner=pruner,
             )
         except Exception as exc:
-            print(f"Could not create study with persistent storage: {exc}")
-            print("Using in-memory storage instead")
-            self.study = optuna.create_study(study_name=self.search_name, direction="maximize", pruner=pruner)
+            logger.error("Could not create study with persistent storage: %s", exc)
+            logger.error("Using in-memory storage instead")
+            self.study = create_study(study_name=self.search_name, direction="maximize", pruner=pruner)
 
         # ##: Run optimization.
-        self.study.optimize(
-            lambda trial: self._objective(trial),
-            n_trials=n_trials,
-            n_jobs=n_jobs,
-            timeout=timeout,
-            show_progress_bar=True,
-        )
+        try:
+            self.study.optimize(
+                lambda trial: self._objective(trial),
+                n_trials=n_trials,
+                n_jobs=n_jobs,
+                timeout=timeout,
+                show_progress_bar=True,
+            )
+        except Exception as exc:
+            logger.error("Optuna optimization failed: %s", exc)
+            if self.search_aim_logger and self.search_aim_logger.run:
+                self.search_aim_logger.log_text(f"Optimization failed: {exc}\n{format_exc()}", name="error_log")
+            if self.search_aim_logger:
+                self.search_aim_logger.close()
+            raise
 
         # ##: Prepare summary.
-        best_params = self.study.best_params
-        best_value = self.study.best_value
+        best_params = {}
+        best_value = None
+        if self.study.best_trial:
+            best_params = self.study.best_trial.params
+            best_value = self.study.best_trial.value
+        else:
+            logger.info("No best trial found (optimization might have failed or yielded no results).")
 
         all_trials = []
         for trial in self.study.trials:
-            if trial.state == optuna.trial.TrialState.COMPLETE:
+            if trial.state == TrialState.COMPLETE:
                 all_trials.append(
                     {
                         "number": trial.number,
@@ -130,43 +210,65 @@ class HyperparameterSearch:
                 )
 
         summary = {
-            "num_experiments": len(all_trials),
-            "best_experiment": f"trial_{self.study.best_trial.number}",
+            "num_completed_trials": len(all_trials),
+            "best_trial_number": self.study.best_trial.number if self.study.best_trial else None,
             "best_mean_reward": best_value,
             "best_hyperparameters": best_params,
-            "all_experiments": all_trials,
+            "all_completed_trials": all_trials,
+            "study_name": self.study.study_name,
+            "direction": str(self.study.direction),
         }
 
-        # ##: Save summary.
+        # ##: Save summary locally.
         summary_path = self.results_dir / f"{self.search_name}_summary.json"
         self.config_manager.save_config(summary, str(summary_path))
 
-        # ##: Generate and save visualizations.
-        self._save_visualizations()
+        # ##: Log summary to the search-level AIM run.
+        if self.search_aim_logger and self.search_aim_logger.run:
+            self.search_aim_logger.log_params(summary, prefix="search_summary")
+
+            if best_value is not None:
+                self.search_aim_logger.log_metric("best_mean_reward", best_value)
+
+        # ##: Generate, save, and log visualizations.
+        self._save_and_log_visualizations()
 
         # ##: Print results.
-        print("Hyperparameter search complete!")
-        print(f"Number of trials: {summary['num_experiments']}")
-        print(f"Best trial: {summary['best_experiment']}")
-        print(f"Best mean reward: {summary['best_mean_reward']:.4f}")
-        print(f"Best hyperparameters: {json.dumps(summary['best_hyperparameters'], indent=2)}")
-        print(f"Visualization plots saved to: {self.results_dir}")
+        logger.info("Hyperparameter search complete!")
+        logger.info("Number of trials: %s", summary["num_completed_trials"])
+        logger.info("Best trial: %s", summary["best_trial_number"])
+        logger.info("Best mean reward: %f:.4f", summary["best_mean_reward"])
+        logger.info("Best hyperparameters: %s", json.dumps(summary["best_hyperparameters"], indent=2))
+        logger.info("Visualization plots saved to: %s", self.results_dir / "visualizations")
+
+        # ##: Close the search-level AIM logger.
+        if self.search_aim_logger:
+            self.search_aim_logger.close()
 
         return summary
 
-    def _objective(self, trial: optuna.Trial) -> float:
+    def _objective(self, trial: Trial) -> float:
         """
         Objective function for Optuna optimization.
+
+        This method is called by Optuna for each trial to evaluate a set of hyperparameters.
 
         Parameters
         ----------
         trial : optuna.Trial
-            Current trial object.
+            Current trial object containing hyperparameter sampling methods.
 
         Returns
         -------
         float
-            Mean reward achieved in this trial.
+            Mean reward achieved in this trial (the optimization objective).
+
+        Raises
+        ------
+        TrialPruned
+            If the trial is pruned due to poor performance.
+        RuntimeError
+            If the experiment fails to run.
         """
         # ##: Sample hyperparameters from search space.
         params = {}
@@ -188,115 +290,146 @@ class HyperparameterSearch:
 
         # ##: Create experiment configuration.
         if not self.base_config:
-            print("Warning: No base configuration specified, using empty configuration")
+            logger.warning("No base configuration specified, using empty configuration")
             self.base_config = {}
 
         # ##: Create experiment config from base config and parameters.
         experiment_config = self._create_experiment_config(self.base_config, params)
         if not isinstance(experiment_config, dict):
             experiment_config = {}
-            print(
-                f"Warning: Got invalid experiment configuration of type {type(experiment_config)}, using empty configuration"
+            logger.warning(
+                "Got invalid experiment configuration of type %s, using empty configuration", type(experiment_config)
             )
 
-        # ##: Generate unique ID for this trial.
+        # ##: Generate unique ID and AIM details for this trial.
         experiment_id = f"trial_{trial.number}"
+        aim_run_name = f"{self.search_name}_{experiment_id}"  # e.g., a2c_search_trial_0
+        aim_tags = ["hyperparameter-search", "trial", self.search_name, f"trial_{trial.number}"]
+        # Add agent type tag if available in base config
+        agent_type = self.base_config.get("agent", {}).get("agent_type", "unknown_agent")
+        aim_tags.append(agent_type)
 
-        # ##: Add trial info to experiment config - ensure we have a valid config first.
+        # ##: Add trial info and sampled params to experiment config for logging by ExperimentRunner.
         if experiment_config is None:
             experiment_config = {}
-            print("Warning: experiment_config is None, using empty dictionary")
-        experiment_config["_trial_info"] = {"number": trial.number}
+            logger.warning("experiment_config is None, using empty dictionary")
+        experiment_config["_trial_info"] = {"number": trial.number, "optuna_params": trial.params}
+        experiment_config["sampled_hyperparameters"] = params
 
-        # ##: Save configuration.
+        # ##: Save trial-specific configuration locally.
         config_path = self.results_dir / f"{experiment_id}_config.yaml"
         self.config_manager.save_config(experiment_config, str(config_path))
 
-        print(f"Running trial {trial.number} with parameters: {params}")
+        logger.info("\n--- Running Trial %d ---", trial.number)
+        logger.info("Parameters: %s", params)
+        logger.info("AIM Run Name: %s", aim_run_name)
 
         # ##: Setup pruning callback.
         def pruning_callback(step, value):
             try:
                 trial.report(value, step)
                 if trial.should_prune():
-                    raise optuna.exceptions.TrialPruned()
-            except Exception as e:
-                print(f"Pruning error: {e}")
+                    logger.info("Trial %d pruned at step %s with value %s.", trial.number, step, value)
+                    raise TrialPruned()
+            except TrialPruned:
+                raise
+            except Exception as exc:
+                logger.error("Error in pruning callback for trial %s: %s", trial.number, exc)
 
-        # ##: Get intermediate values for pruning during experiment run.
-        experiment_results = self.experiment_runner.run_experiment(config_path, pruning_callback=pruning_callback)
+        # ##: Run the experiment for this trial, passing AIM details.
+        try:
+            experiment_results = self.experiment_runner.run_experiment(
+                config_path, pruning_callback=pruning_callback, aim_tags=list(set(aim_tags))
+            )
+        except TrialPruned:
+            logger.info("Trial %d was pruned.", trial.number)
+            raise
+        except Exception as exc:
+            logger.error("Error running experiment for trial %d: %s", trial.number, exc)
+            return -float("inf")
 
-        # ##: Check if the trial was pruned.
-        if experiment_results.get("pruned", False):
-            raise optuna.exceptions.TrialPruned()
-
-        # ##: Save results.
-        experiment_results["hyperparameters"] = params
-        experiment_results["trial_number"] = trial.number
-        results_path = self.results_dir / f"{experiment_id}_results.json"
-        self.config_manager.save_config(experiment_results, str(results_path))
-
-        # ##: Return mean reward.
-        return experiment_results.get("mean_reward", 0)
+        # ##: Return the final mean reward (or relevant metric) for Optuna.
+        objective_value = experiment_results.get("final_mean_reward", experiment_results.get("mean_reward", 0))
+        logger.info("--- Trial %d Completed ---", trial.number)
+        logger.info("Final Objective Value: %f:.4f", objective_value)
+        return objective_value
 
     @staticmethod
-    def _pruning_callback(trial: optuna.Trial, step: int, value: float) -> None:
+    def _pruning_callback(trial: Trial, step: int, value: float) -> None:
         """
         Callback for pruning under-performing trials.
 
         Parameters
         ----------
         trial : optuna.Trial
-            Current trial.
+            Current trial being evaluated.
         step : int
             Current training step.
         value : float
-            Current observed value (reward).
+            Current observed value (typically reward).
+
+        Raises
+        ------
+        TrialPruned
+            If the trial should be pruned based on intermediate results.
         """
         trial.report(value, step)
 
         if trial.should_prune():
-            raise optuna.exceptions.TrialPruned()
+            raise TrialPruned()
 
-    def _save_visualizations(self) -> None:
+    def _save_and_log_visualizations(self) -> None:
         """
         Generate and save optimization visualizations.
+
+        Creates several plots showing the optimization progress and saves them to disk.
+        Also logs the visualizations to AIM if available.
+
+        The following visualizations are generated:
+        - Optimization history plot
+        - Parameter importance plot
+        - Slice plot
+        - Contour plot
+
+        Notes
+        -----
+        Requires plotly for visualization generation.s
         """
         if self.study is None:
-            print("No study available for visualization")
+            logger.warning("No study available for visualization")
             return
 
-        # ##: Create visualization directory.
+        # ##: Create visualization directory locally.
         vis_dir = self.results_dir / "visualizations"
         vis_dir.mkdir(exist_ok=True)
 
-        # ##: Plot optimization history.
-        try:
-            fig = plot_optimization_history(self.study)
-            fig.write_image(str(vis_dir / "optimization_history.png"))
-        except Exception as e:
-            print(f"Could not generate optimization history plot: {e}")
+        plot_functions = {
+            "optimization_history": plot_optimization_history,
+            "param_importances": plot_param_importances,
+            "slice": plot_slice,
+            "contour": plot_contour,
+        }
 
-        # ##: Plot parameter importances if we have completed trials.
-        try:
-            fig = plot_param_importances(self.study)
-            fig.write_image(str(vis_dir / "param_importances.png"))
-        except Exception as e:
-            print(f"Could not generate parameter importance plot: {e}")
+        for name, plot_func in plot_functions.items():
+            try:
+                fig = plot_func(self.study)
+                img_path = vis_dir / f"{name}.png"
+                fig.write_image(str(img_path))
+                logger.info("Saved visualization: %s", img_path)
 
-        # ##: Plot slice plot for key parameters.
-        try:
-            fig = plot_slice(self.study)
-            fig.write_image(str(vis_dir / "slice_plot.png"))
-        except Exception as e:
-            print(f"Could not generate slice plot: {e}")
+                # ##: Log the saved image to the search-level AIM run.
+                if self.search_aim_logger and self.search_aim_logger.run:
+                    try:
+                        with open(img_path, "rb") as file:
+                            aim_image = Image(file.read(), format="png", caption=f"Optuna {name} plot")
+                            self.search_aim_logger.log_image(aim_image, name=f"optuna_{name}_plot")
+                    except Exception as exc:
+                        logger.error("Could not log visualization '%s' to AIM: %s", name, exc)
 
-        # ##: Plot contour plot for parameter interactions.
-        try:
-            fig = plot_contour(self.study)
-            fig.write_image(str(vis_dir / "contour_plot.png"))
-        except Exception as e:
-            print(f"Could not generate contour plot: {e}")
+            except (ValueError, ImportError, RuntimeError) as exc:
+                logger.error("Could not generate or save visualization '%s': %s", name, exc)
+            except Exception as exc:
+                logger.error("An unexpected error occurred during visualization '%s': %s", name, exc)
 
     @staticmethod
     def _create_experiment_config(base_config: Dict[str, Any], hyperparameters: Dict[str, Any]) -> Dict[str, Any]:
@@ -306,14 +439,21 @@ class HyperparameterSearch:
         Parameters
         ----------
         base_config : Dict[str, Any]
-            Base configuration.
+            Base configuration dictionary.
         hyperparameters : Dict[str, Any]
-            Hyperparameters to apply.
+            Dictionary of hyperparameters to merge, with dot notation paths.
 
         Returns
         -------
         Dict[str, Any]
-            Combined experiment configuration.
+            Combined experiment configuration with hyperparameters merged into the base config.
+
+        Examples
+        --------
+        >>> base = {"agent": {"lr": 0.01}}
+        >>> params = {"agent.lr": 0.001, "env.name": "CartPole"}
+        >>> _create_experiment_config(base, params)
+        {'agent': {'lr': 0.001}, 'env': {'name': 'CartPole'}}
         """
         experiment_config = base_config.copy()
 
@@ -333,7 +473,26 @@ class HyperparameterSearch:
 
 def main():
     """
-    Run a hyperparameter search from the command line.
+    Create an experiment configuration from a base configuration and hyperparameters.
+
+    Parameters
+    ----------
+    base_config : Dict[str, Any]
+        Base configuration dictionary.
+    hyperparameters : Dict[str, Any]
+        Dictionary of hyperparameters to merge, with dot notation paths.
+
+    Returns
+    -------
+    Dict[str, Any]
+        Combined experiment configuration with hyperparameters merged into the base config.
+
+    Examples
+    --------
+    >>> base = {"agent": {"lr": 0.01}}
+    >>> params = {"agent.lr": 0.001, "env.name": "CartPole"}
+    >>> _create_experiment_config(base, params)
+    {'agent': {'lr': 0.001}, 'env': {'name': 'CartPole'}}
     """
     # ##: Parse command line arguments.
     parser = ArgumentParser(description="Run a hyperparameter search for reinforcement learning experiments")
