@@ -3,25 +3,21 @@
 A2C Agent implementation.
 """
 
-import json
-import os
 from typing import Any, Dict, Tuple
 
 import tensorflow as tf
-from keras import models, optimizers
 from numpy import ndarray
 
-from reinforce.agents.a2c.a2c_model import A2CModel
+from reinforce.agents.actor_critic.actor_critic_agent import ActorCriticAgent
 from reinforce.configs.models import A2CConfig
-from reinforce.core.base_agent import BaseAgent
 from reinforce.utils.preprocessing import preprocess_observation
 
 
-class A2CAgent(BaseAgent):
+class A2CAgent(ActorCriticAgent):  # Inherit from the new base class
     """
     A2C (Advantage Actor-Critic) agent implementation.
 
-    This class implements the BaseAgent interface for the A2C algorithm.
+    This class implements the Actor-Critic interface for the A2C algorithm.
     """
 
     def __init__(self, action_space: int, hyperparameters: A2CConfig):
@@ -33,18 +29,14 @@ class A2CAgent(BaseAgent):
         action_space : int
             Number of possible actions. Should match `hyperparameters.action_space`.
         hyperparameters : A2CConfig
-            Pydantic model containing hyperparameters.
+            Pydantic model containing A2C hyperparameters.
         """
-        self._name = "A2CAgent"
+        super().__init__(action_space=action_space, hyperparameters=hyperparameters, agent_name="A2CAgent")
 
-        # ##: Use the action_space provided (derived from environment).
-        self.action_space = action_space
+        # ##: The base class init already assigns self.hyperparameters, but we refine the type hint here.
         self.hyperparameters: A2CConfig = hyperparameters
 
-        # ##: Access attributes directly from Pydantic model.
-        self._model = A2CModel(action_space=action_space, embedding_size=self.hyperparameters.embedding_size)
-        self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters.learning_rate)
-
+    # ##: act method remains specific to A2C's action selection logic.
     def act(self, observation: ndarray, training: bool = True) -> Tuple[int, Dict[str, Any]]:
         """
         Select an action based on the current observation.
@@ -230,68 +222,8 @@ class A2CAgent(BaseAgent):
             "entropy": tf.reduce_mean(entropy),
         }
 
-    def save(self, path: str) -> None:
+    def _load_specific_hyperparameters(self, config: Dict[str, Any]) -> A2CConfig:
         """
-        Save the agent to the specified path.
-
-        Parameters
-        ----------
-        path : str
-            Directory path to save the agent.
+        Load specific hyperparameters for the A2C agent.
         """
-        # ##: Create directory if it doesn't exist.
-        os.makedirs(path, exist_ok=True)
-
-        # ##: Save the model.
-        self._model.save(os.path.join(path, f"{self._name}_model.keras"))
-
-        # ##: Save the hyperparameters by dumping the Pydantic model to JSON.
-        hyperparams_path = os.path.join(path, "hyperparams.json")
-        with open(hyperparams_path, "w", encoding="utf-8") as file:
-            file.write(self.hyperparameters.model_dump_json(indent=2))
-
-    def load(self, path: str) -> None:
-        """
-        Load the agent from the specified path.
-
-        Parameters
-        ----------
-        path : str
-            Directory path to load the agent from.
-        """
-        # ##: Load the model.
-        self._model = models.load_model(os.path.join(path, f"{self._name}_model.keras"))
-
-        # ##: Load the hyperparameters from JSON and parse into Pydantic model.
-        hyperparams_path = os.path.join(path, "hyperparams.json")
-        with open(hyperparams_path, "r", encoding="utf-8") as f:
-            loaded_hyperparams_dict = json.load(f)
-        self.hyperparameters = A2CConfig(**loaded_hyperparams_dict)
-        self.action_space = self.hyperparameters.action_space
-
-        # ##: Re-initialize optimizer with loaded learning rate.
-        self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters.learning_rate)
-
-    @property
-    def name(self) -> str:
-        """
-        Return the name of the agent.
-
-        Returns
-        -------
-        str
-            Agent name.
-        """
-        return self._name
-
-    @property
-    def model(self) -> A2CModel:
-        """
-        Return the underlying model used by the agent.
-
-        Returns
-        -------
-        A2CModel
-            The model used by the agent.
-        """
-        return self._model
+        return A2CConfig(**config)
