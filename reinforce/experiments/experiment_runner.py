@@ -11,23 +11,21 @@ import sys
 from argparse import ArgumentParser
 from time import time
 from traceback import format_exc
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from loguru import logger
 
-from reinforce.agents import A2CAgent
+from reinforce.agents import A2CAgent, PPOAgent
 from reinforce.configs import ConfigManager
 from reinforce.configs.models import (
-    A2CConfig,
     AgentConfigUnion,
     EnvironmentConfig,
-    EpisodeTrainerConfig,
     ExperimentConfig,
     TrainerConfigUnion,
 )
 from reinforce.core import BaseAgent, BaseEnvironment, BaseTrainer
 from reinforce.environments import MazeEnvironment
-from reinforce.trainers import EpisodeTrainer
+from reinforce.trainers import EpisodeTrainer, PPOTrainer
 from reinforce.utils import AimLogger
 from reinforce.utils.logging_setup import setup_logger
 
@@ -208,16 +206,16 @@ class ExperimentRunner:
             If the agent type specified in the config is not supported.
         """
         if agent_config.agent_type == "A2C":
-            if isinstance(agent_config, A2CConfig):
-                return A2CAgent(action_space=env_action_space_size, hyperparameters=agent_config)
-            raise TypeError(f"Expected A2CConfig, got {type(agent_config)}")
+            return A2CAgent(action_space=env_action_space_size, hyperparameters=agent_config)
+        if agent_config.agent_type == "PPO":
+            return PPOAgent(action_space=env_action_space_size, hyperparameters=agent_config)
 
         raise ValueError(f"Unsupported agent type: {agent_config.agent_type}")
 
     @staticmethod
     def _create_trainer(
         trainer_config: TrainerConfigUnion,
-        agent: BaseAgent,
+        agent: Union[A2CAgent, PPOAgent],
         environment: BaseEnvironment,
         aim_logger: Optional[AimLogger] = None,
     ) -> BaseTrainer:
@@ -231,7 +229,7 @@ class ExperimentRunner:
         ----------
         trainer_config : TrainerConfigUnion
             Pydantic trainer configuration model (e.g., EpisodeTrainerConfig).
-        agent : BaseAgent
+        agent : A2CAgent | PPOAgent
             The agent instance to be trained.
         environment : BaseEnvironment
             The environment instance to train in.
@@ -249,11 +247,9 @@ class ExperimentRunner:
             If the trainer type specified in the config is not supported.
         """
         if trainer_config.trainer_type == "EpisodeTrainer":
-            if isinstance(trainer_config, EpisodeTrainerConfig):
-                return EpisodeTrainer(
-                    agent=agent, environment=environment, config=trainer_config, aim_logger=aim_logger
-                )
-            raise TypeError(f"Expected EpisodeTrainerConfig, got {type(trainer_config)}")
+            return EpisodeTrainer(agent=agent, environment=environment, config=trainer_config, aim_logger=aim_logger)
+        if trainer_config.trainer_type == "PPOTrainer":
+            return PPOTrainer(agent=agent, environment=environment, config=trainer_config, aim_logger=aim_logger)
 
         raise ValueError(f"Unsupported trainer type: {trainer_config.trainer_type}")
 
