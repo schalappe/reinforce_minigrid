@@ -14,7 +14,6 @@ from time import time
 from traceback import format_exc
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import tensorflow as tf
 from loguru import logger
 from pydantic import ValidationError
 
@@ -66,8 +65,8 @@ class ExperimentRunner:
         Set up the experiment components: configuration, environment, agent, trainer and logger.
 
         This method loads and validates the experiment configuration using Pydantic, initializes the AIM logger,
-        creates the environment and agent
-        based on the configuration, and sets up the trainer with the appropriate configurations.
+        creates the environment and agent based on the configuration, and sets up the trainer with the appropriate
+        configurations.
 
         Parameters
         ----------
@@ -95,16 +94,8 @@ class ExperimentRunner:
             logger.error(f"Failed to load or validate experiment config '{experiment_config_path}': {e}")
             raise ValueError(f"Configuration error: {e}") from e
 
-        # ##: Enable Mixed Precision Training globally.
-        try:
-            tf.keras.mixed_precision.set_global_policy("mixed_float16")
-            logger.info("Mixed precision policy 'mixed_float16' set globally.")
-        except Exception as mp_exc:
-            logger.warning(f"Could not set mixed precision policy: {mp_exc}. Continuing with default precision.")
-
-        experiment_name = Path(experiment_config_path).stem
-
         # ##: Initialize AIM Logger.
+        experiment_name = Path(experiment_config_path).stem
         base_tags = ["reinforce", config.agent.agent_type]
         if aim_tags:
             base_tags.extend(aim_tags)
@@ -126,7 +117,7 @@ class ExperimentRunner:
 
         # ##: Set up the environment, agent, and trainer using Pydantic config objects.
         environment = self._create_environment(config.environment)
-        agent = self._create_agent(config.agent)
+        agent = self._create_agent(config.agent, environment.action_space.n)
 
         # ##: Pass pruning callback directly if Optuna trial info exists in the config.
         if config.trial_info is not None:
@@ -238,7 +229,7 @@ class ExperimentRunner:
         raise ValueError(f"Unsupported environment type: {env_config.env_type}")
 
     @staticmethod
-    def _create_agent(agent_config: AgentConfigUnion) -> BaseAgent:
+    def _create_agent(agent_config: AgentConfigUnion, env_action_space_size: int) -> BaseAgent:
         """
         Create an agent based on the Pydantic configuration model.
 
@@ -262,7 +253,7 @@ class ExperimentRunner:
         """
         if agent_config.agent_type == "A2C":
             if isinstance(agent_config, A2CConfig):
-                return A2CAgent(action_space=agent_config.action_space, hyperparameters=agent_config)
+                return A2CAgent(action_space=env_action_space_size, hyperparameters=agent_config)
             raise TypeError(f"Expected A2CConfig, got {type(agent_config)}")
 
         raise ValueError(f"Unsupported agent type: {agent_config.agent_type}")

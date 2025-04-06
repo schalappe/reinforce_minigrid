@@ -18,8 +18,6 @@ class A2CConfig(AgentConfig):
     ----------
     agent_type : Literal["A2C"]
         Type of the agent, fixed as "A2C".
-    action_space : int
-        Number of possible actions in the environment. Must be at least 1.
     embedding_size : int, optional
         Size of the embedding layer (default=128). Must be at least 1.
     learning_rate : float, optional
@@ -33,7 +31,6 @@ class A2CConfig(AgentConfig):
     """
 
     agent_type: Literal["A2C"] = "A2C"
-    action_space: int = Field(..., ge=1, description="Number of possible actions")
     embedding_size: int = Field(128, ge=1, description="Size of the embedding layer")
     learning_rate: float = Field(0.001, ge=0, description="Learning rate for the optimizer")
     discount_factor: float = Field(0.99, ge=0, le=1, description="Discount factor for future rewards")

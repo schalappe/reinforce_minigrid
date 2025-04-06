@@ -38,11 +38,7 @@ class A2CAgent(BaseAgent):
         """
         self._name = "A2CAgent"
 
-        # ##: Ensure action_space consistency.
-        if action_space != hyperparameters.action_space:
-            raise ValueError(
-                f"action_space ({action_space}) must match hyperparameters.action_space ({hyperparameters.action_space})"
-            )
+        # ##: Use the action_space provided (derived from environment).
         self.action_space = action_space
         self.hyperparameters: A2CConfig = hyperparameters
 
