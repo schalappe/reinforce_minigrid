@@ -7,8 +7,8 @@ This example demonstrates how to use the configuration management system
 to load and run an experiment defined in a YAML file.
 """
 
-import os
 import argparse
+import os
 
 from reinforce.configs import ConfigManager
 from reinforce.experiments import ExperimentRunner
@@ -16,7 +16,7 @@ from reinforce.experiments import ExperimentRunner
 
 def main(config_path):
     """Run a training example using configuration files.
-    
+
     Args:
         config_path: Path to the experiment configuration file
     """
@@ -24,14 +24,14 @@ def main(config_path):
     os.makedirs("outputs/models", exist_ok=True)
     os.makedirs("outputs/visualizations", exist_ok=True)
     os.makedirs("outputs/results", exist_ok=True)
-    
+
     # Create experiment runner
     runner = ExperimentRunner()
-    
+
     # Run the experiment
     print(f"Running experiment with configuration: {config_path}")
     results = runner.run_experiment(config_path)
-    
+
     # Print results
     print("Experiment Results:")
     print(f"Episodes: {results['episodes']}")
@@ -43,18 +43,22 @@ def main(config_path):
 if __name__ == "__main__":
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Train an agent using configuration files")
-    parser.add_argument("--config", type=str, default="examples/configs/a2c_maze.yaml",
-                        help="Path to the experiment configuration file")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="examples/configs/a2c_maze.yaml",
+        help="Path to the experiment configuration file",
+    )
     args = parser.parse_args()
-    
+
     # Create example configuration if it doesn't exist
     if not os.path.exists(args.config):
         # Create directory if it doesn't exist
         os.makedirs(os.path.dirname(args.config), exist_ok=True)
-        
+
         # Create configuration manager
         config_manager = ConfigManager()
-        
+
         # Create experiment configuration
         config = {
             "agent": {
@@ -64,11 +68,9 @@ if __name__ == "__main__":
                 "learning_rate": 0.001,
                 "discount_factor": 0.99,
                 "entropy_coef": 0.01,
-                "value_coef": 0.5
+                "value_coef": 0.5,
             },
-            "environment": {
-                "use_image_obs": True
-            },
+            "environment": {"use_image_obs": True},
             "trainer": {
                 "trainer_type": "EpisodeTrainer",
                 "max_episodes": 1000,
@@ -79,15 +81,15 @@ if __name__ == "__main__":
                 "gamma": 0.99,
                 "log_frequency": 10,
                 "save_frequency": 500,
-                "save_dir": "outputs/models"
+                "save_dir": "outputs/models",
             },
             "save_results": True,
-            "results_dir": "outputs/results"
+            "results_dir": "outputs/results",
         }
-        
+
         # Save the configuration
         config_manager.save_config(config, args.config)
         print(f"Created example configuration: {args.config}")
-    
+
     # Run the example
     main(args.config)

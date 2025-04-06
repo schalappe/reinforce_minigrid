@@ -7,8 +7,8 @@ This example demonstrates how to use the configuration management system
 to load and run an experiment defined in a YAML file using the PPO algorithm.
 """
 
-import os
 import argparse
+import os
 from pathlib import Path
 
 from reinforce.configs import ConfigManager
@@ -48,8 +48,12 @@ def main(config_path):
 if __name__ == "__main__":
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Train a PPO agent using configuration files")
-    parser.add_argument("--config", type=str, default="examples/configs/ppo_maze.yaml",
-                        help="Path to the PPO experiment configuration file")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="examples/configs/ppo_maze.yaml",
+        help="Path to the PPO experiment configuration file",
+    )
     args = parser.parse_args()
 
     config_file_path = Path(args.config)
@@ -66,11 +70,11 @@ if __name__ == "__main__":
         # Note: action_space will be overridden by the environment if not specified or incorrect
         config = {
             "agent": {
-                "agent_type": "PPO", # Use PPO agent
-                "action_space": 7,   # Placeholder, will be set by env
+                "agent_type": "PPO",  # Use PPO agent
+                "action_space": 7,  # Placeholder, will be set by env
                 "embedding_size": 128,
                 "learning_rate": 3e-4,
-                "discount_factor": 0.99, # gamma
+                "discount_factor": 0.99,  # gamma
                 "gae_lambda": 0.95,
                 "clip_range": 0.2,
                 "entropy_coef": 0.01,
@@ -81,25 +85,25 @@ if __name__ == "__main__":
                 "initial_kl_coeff": 1.0,
             },
             "environment": {
-                "env_id": "MiniGrid-Maze-9x9-v0", # Example environment ID
+                "env_id": "MiniGrid-Maze-9x9-v0",  # Example environment ID
                 "use_image_obs": True,
-                "max_steps": 500 # Match trainer's max_steps_per_episode
+                "max_steps": 500,  # Match trainer's max_steps_per_episode
             },
             "trainer": {
-                "trainer_type": "PPOTrainer", # Use PPOTrainer
-                "n_steps": 2048,       # Rollout length
-                "n_epochs": 10,        # Update epochs per rollout
-                "batch_size": 64,      # Minibatch size
-                "max_total_steps": 1_000_000, # Total training steps
-                "max_steps_per_episode": 500, # Max steps in env episode
-                "eval_frequency": 50,       # Evaluate every N episodes
-                "num_eval_episodes": 10,    # Num episodes per evaluation
-                "log_frequency": 1,         # Log progress every N episodes
-                "save_frequency": 100,      # Save checkpoint every N episodes
-                "save_dir": "outputs/models/ppo", # PPO specific save dir
+                "trainer_type": "PPOTrainer",  # Use PPOTrainer
+                "n_steps": 2048,  # Rollout length
+                "n_epochs": 10,  # Update epochs per rollout
+                "batch_size": 64,  # Minibatch size
+                "max_total_steps": 1_000_000,  # Total training steps
+                "max_steps_per_episode": 500,  # Max steps in env episode
+                "eval_frequency": 50,  # Evaluate every N episodes
+                "num_eval_episodes": 10,  # Num episodes per evaluation
+                "log_frequency": 1,  # Log progress every N episodes
+                "save_frequency": 100,  # Save checkpoint every N episodes
+                "save_dir": "outputs/models/ppo",  # PPO specific save dir
                 # gamma is usually taken from agent config
             },
-            "aim_experiment_name": "ppo_maze_example" # Optional AIM name
+            "aim_experiment_name": "ppo_maze_example"  # Optional AIM name
             # Removed save_results and results_dir as AIM handles logging
         }
 
