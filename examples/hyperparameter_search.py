@@ -87,7 +87,7 @@ if __name__ == "__main__":
                 "num_eval_episodes": 5,
                 "gamma": 0.99,
                 "log_frequency": 50,
-                # "log_env_image_frequency": 50,
+                "log_env_image_frequency": 50,
                 "save_frequency": 25,
                 "save_dir": "outputs/models"
             }

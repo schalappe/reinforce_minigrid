@@ -167,8 +167,12 @@ class EpisodeTrainer(BaseTrainer):
         # ##: Log environment image periodically.
         if self.config.log_env_image_frequency > 0 and self.total_steps % self.config.log_env_image_frequency == 0:
             try:
+                processed_observation = observation
+                if isinstance(observation, np.ndarray) and getattr(observation, "dtype", "N/A") == np.float32:
+                    processed_observation = (observation * 255).clip(0, 255).astype(np.uint8)
+
                 self.aim_logger.log_image(
-                    observation,
+                    processed_observation,
                     name="environment_observation",
                     step=self.total_steps,
                     epoch=self.episode,

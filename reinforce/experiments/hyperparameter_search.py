@@ -12,18 +12,11 @@ from pathlib import Path
 from traceback import format_exc
 from typing import Any, Dict, Optional, Union
 
-from aim import Image
 from loguru import logger
 from optuna import Study, create_study
 from optuna.exceptions import TrialPruned
 from optuna.pruners import MedianPruner
 from optuna.trial import Trial, TrialState
-from optuna.visualization import (
-    plot_contour,
-    plot_optimization_history,
-    plot_param_importances,
-    plot_slice,
-)
 
 from reinforce.configs import ConfigManager
 from reinforce.configs.models import ExperimentConfig
@@ -239,9 +232,6 @@ class HyperparameterSearch:
         search_aim_logger.log_params(summary, prefix="search_summary")
         if best_value is not None:
             search_aim_logger.log_metric("best_mean_reward", best_value)
-
-        # ##: Generate, save, and log visualizations.
-        self._save_and_log_visualizations(search_aim_logger)
 
         # ##: Print results.
         logger.info("Hyperparameter search complete!")
@@ -475,58 +465,6 @@ class HyperparameterSearch:
         experiment_config, aim_tags = self._prepare_trial_config(params, trial)
 
         return self._execute_trial(trial, experiment_config, aim_tags)
-
-    def _save_and_log_visualizations(self, search_aim_logger: Optional[AimLogger]) -> None:
-        """
-        Generate and save optimization visualizations. Also logs them to AIM.
-
-        Creates several plots showing the optimization progress and saves them to disk.
-        Also logs the visualizations to AIM if available.
-
-        The following visualizations are generated:
-        - Optimization history plot
-        - Parameter importance plot
-        - Slice plot
-        - Contour plot
-
-        Notes
-        -----
-        Requires plotly for visualization generation.s
-        """
-        if self.study is None:
-            logger.warning("No study available for visualization")
-            return
-
-        # ##: Create visualization directory locally.
-        vis_dir = self.results_dir / "visualizations"
-        vis_dir.mkdir(exist_ok=True)
-
-        plot_functions = {
-            "optimization_history": plot_optimization_history,
-            "param_importances": plot_param_importances,
-            "slice": plot_slice,
-            "contour": plot_contour,
-        }
-
-        for name, plot_func in plot_functions.items():
-            try:
-                fig = plot_func(self.study)
-                logger.info(f"Saved {name} visualization")
-
-                # ##: Log the saved image to the search-level AIM run.
-                if search_aim_logger and search_aim_logger.run:
-                    try:
-                        aim_image = Image(fig, caption=f"Optuna {name} plot")
-                        search_aim_logger.log_image(aim_image, name=f"optuna_{name}_plot")
-                    except Exception as aim_exc:
-                        logger.error(f"Could not log visualization '{name}' to AIM: {aim_exc}")
-
-            except ImportError:
-                logger.warning(f"Plotly not installed. Skipping visualization '{name}'.")
-            except ValueError as ve:
-                logger.warning(f"Could not generate visualization '{name}' (possibly insufficient data): {ve}")
-            except RuntimeError as rte:
-                logger.error(f"Runtime error generating visualization '{name}': {rte}")
 
     @staticmethod
     def _create_experiment_config(base_config: Dict[str, Any], hyperparameters: Dict[str, Any]) -> Dict[str, Any]:
