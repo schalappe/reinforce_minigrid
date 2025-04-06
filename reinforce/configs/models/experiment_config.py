@@ -6,7 +6,6 @@ This module defines the main configuration structure for reinforcement learning 
 including agent, trainer, and environment configurations.
 """
 
-from pathlib import Path
 from typing import Annotated, Optional, Union
 
 from pydantic import BaseModel, Field
@@ -37,10 +36,6 @@ class ExperimentConfig(BaseModel):
         Configuration for the RL environment (default: EnvironmentConfig()).
     aim_experiment_name : str, optional
         Custom name for the AIM experiment tracking (default: None).
-    save_results : bool, optional
-        Whether to save experiment results to a file (default: False).
-    results_dir : Path, optional
-        Directory to save results (default: "outputs/results").
     trial_info : dict, optional
         Internal field for Optuna trial information (excluded from serialization).
 
@@ -53,11 +48,7 @@ class ExperimentConfig(BaseModel):
     agent: AgentConfigUnion = Field(description="Agent configuration")
     trainer: TrainerConfigUnion = Field(description="Trainer configuration")
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig, description="Environment configuration")
-
-    # ##: Optional top-level experiment parameters.
     aim_experiment_name: Optional[str] = Field(None, description="Custom name for the AIM experiment")
-    save_results: bool = Field(False, description="Whether to save experiment results to a file")
-    results_dir: Path = Field(default=Path("outputs") / "results", description="Directory to save results")
 
     # ##: Field for Optuna trial info (internal, added by hyperparameter search).
     trial_info: Optional[dict] = Field(None, exclude=True)

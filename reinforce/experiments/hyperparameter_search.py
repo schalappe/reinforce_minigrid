@@ -26,6 +26,7 @@ from optuna.visualization import (
 )
 
 from reinforce.configs import ConfigManager
+from reinforce.configs.models import ExperimentConfig
 from reinforce.experiments.experiment_runner import ExperimentRunner
 from reinforce.utils import AimLogger
 from reinforce.utils.logging_setup import setup_logger
@@ -41,25 +42,16 @@ class HyperparameterSearch:
     with support for parallel execution, pruning, and visualization.
     """
 
-    def __init__(self, config_dir: Optional[str] = None):
-        """
-        Initialize the hyperparameter search.
+    config_manager = ConfigManager()
+    experiment_runner = ExperimentRunner()
+    results_dir = Path("outputs/hyperparameter_search")
+    results_dir.mkdir(parents=True, exist_ok=True)
+    study: Optional[Study] = None
+    search_config: Optional[Dict[str, Any]] = None
+    base_config: Optional[Dict[str, Any]] = None
+    search_name: Optional[str] = None
 
-        Parameters
-        ----------
-        config_dir : str, optional
-            Directory containing configuration files. If None, default paths are used.
-        """
-        self.config_manager = ConfigManager(config_dir)
-        self.experiment_runner = ExperimentRunner(config_dir)
-        self.results_dir = Path("outputs/hyperparameter_search")
-        self.results_dir.mkdir(parents=True, exist_ok=True)
-        self.study: Optional[Study] = None
-        self.search_config: Optional[Dict[str, Any]] = None
-        self.base_config: Optional[Dict[str, Any]] = None
-        self.search_name: Optional[str] = None
-
-    def _setup_search_logging(self, search_config_path: Union[str, Path], n_trials: int) -> AimLogger:
+    def _setup_search_logging(self, search_name: str, n_trials: int) -> AimLogger:
         """
         Initialize AIM logger for the search and log setup parameters.
 
@@ -69,8 +61,8 @@ class HyperparameterSearch:
 
         Parameters
         ----------
-        search_config_path : Union[str, Path]
-            Path to the hyperparameter search configuration file.
+        search_name : str
+            Name of the hyperparameter search.
         n_trials : int
             Number of trials to run in the hyperparameter search.
 
@@ -84,76 +76,41 @@ class HyperparameterSearch:
         Exception
             If there are issues with initializing the AimLogger.
         """
-        search_config_name = Path(search_config_path).stem
         search_aim_logger = AimLogger(
-            experiment_name=f"HyperparameterSearch_{search_config_name}",
-            tags=["hyperparameter-search", "summary", search_config_name],
+            experiment_name=f"hyperparameter_{search_name}", tags=["hyperparameter-search", "summary", search_name]
         )
-
-        if search_aim_logger.run:
-            search_aim_logger.log_params(
-                {
-                    "search_config_path": str(search_config_path),
-                    "n_trials": n_trials,
-                    "search_name": search_config_name,
-                },
-                prefix="search_setup",
-            )
-            self.search_name = search_config_name
-        else:
-            logger.warning("Failed to initialize AIM logger for search summary.")
-            self.search_name = search_config_name
+        search_aim_logger.log_params({"n_trials": n_trials}, prefix="search_setup")
+        self.search_name = search_name
 
         return search_aim_logger
 
-    def _load_configs(self, search_config_path: Union[str, Path], search_aim_logger: Optional[AimLogger]) -> None:
+    def _load_configs(self, search_config_path: Union[str, Path], search_aim_logger: AimLogger) -> None:
         """
-        Load search and base configurations.
-
-        Loads the hyperparameter search configuration and the base experiment configuration. The base
-        configuration can be specified as a file path in the search configuration, or provided inline as a dictionary.
-        If an AimLogger instance is provided, the configurations are logged to AIM for tracking purposes.
+        Loads the hyperparameter search configuration.
 
         Parameters
         ----------
         search_config_path : Union[str, Path]
             Path to the hyperparameter search configuration file.
-        search_aim_logger : Optional[AimLogger]
-            Optional AimLogger instance for logging.
+        search_aim_logger : AimLogger
+            AimLogger instance for logging.
 
         Raises
         ------
         FileNotFoundError
             If the search or base configuration file is not found.
-        Exception
-            If there are issues loading the configurations.
         """
         try:
             self.search_config = self.config_manager.load_config(str(search_config_path))
-            if search_aim_logger and search_aim_logger.run and self.search_config:
+            self.base_config = self.search_config.get("base_config", {})
+
+            if self.search_config:
                 search_aim_logger.log_params(self.search_config.get("hyperparameters", {}), prefix="search_space")
         except FileNotFoundError as exc:
             logger.error(f"Search config file not found: {exc}")
             raise
         except Exception as exc:
             logger.error(f"Error loading search config: {exc}")
-            raise
-
-        try:
-            base_config_source = self.search_config.get("base_config", {})
-            if isinstance(base_config_source, str):
-                self.base_config = self.config_manager.load_config(str(base_config_source))
-            else:
-                self.base_config = base_config_source if isinstance(base_config_source, dict) else {}
-
-            if search_aim_logger and search_aim_logger.run:
-                log_val = str(base_config_source) if isinstance(base_config_source, str) else "inline_dict"
-                search_aim_logger.log_params({"base_config_source": log_val}, prefix="search_setup")
-        except FileNotFoundError as exc:
-            logger.error(f"Base config file not found: {exc}")
-            raise
-        except Exception as exc:
-            logger.error(f"Error loading base config: {exc}")
             raise
 
     def _create_or_load_study(self) -> None:
@@ -193,12 +150,8 @@ class HyperparameterSearch:
             logger.error(f"Database backend for Optuna storage not installed: {exc}")
             logger.warning("Using in-memory storage instead.")
             self.study = create_study(study_name=self.search_name, direction="maximize", pruner=pruner)
-        except Exception as exc:
-            logger.error(f"Could not create study with persistent storage: {exc}")
-            logger.warning("Using in-memory storage instead.")
-            self.study = create_study(study_name=self.search_name, direction="maximize", pruner=pruner)
 
-    def _run_optimization(self, n_trials: int, search_aim_logger: Optional[AimLogger]) -> None:
+    def _run_optimization(self, n_trials: int, search_aim_logger: AimLogger) -> None:
         """
         Run the Optuna optimization process.
 
@@ -209,8 +162,8 @@ class HyperparameterSearch:
         ----------
         n_trials : int
             Number of trials to run in the hyperparameter search.
-        search_aim_logger : Optional[AimLogger]
-            Optional AimLogger instance for logging.
+        search_aim_logger : AimLogger
+            AimLogger instance for logging.
 
         Raises
         ------
@@ -226,11 +179,10 @@ class HyperparameterSearch:
             self.study.optimize(self._objective, n_trials=n_trials, show_progress_bar=True)
         except Exception as exc:
             logger.error(f"Optuna optimization failed: {exc}")
-            if search_aim_logger and search_aim_logger.run:
-                search_aim_logger.log_text(f"Optimization failed: {exc}\n{format_exc()}", name="error_log")
+            search_aim_logger.log_text(f"Optimization failed: {exc}\n{format_exc()}", name="error_log")
             raise
 
-    def _summarize_and_save_results(self, search_aim_logger: Optional[AimLogger]) -> Dict[str, Any]:
+    def _summarize_and_save_results(self, search_aim_logger: AimLogger) -> Dict[str, Any]:
         """
         Prepare, save, and log the search summary and visualizations.
 
@@ -240,8 +192,8 @@ class HyperparameterSearch:
 
         Parameters
         ----------
-        search_aim_logger : Optional[AimLogger]
-            Optional AimLogger instance for logging.
+        search_aim_logger : AimLogger
+            AimLogger instance for logging.
 
         Returns
         -------
@@ -283,15 +235,10 @@ class HyperparameterSearch:
             "direction": str(self.study.direction),
         }
 
-        # ##: Save summary locally.
-        summary_path = self.results_dir / f"{self.search_name}_summary.json"
-        self.config_manager.save_config(summary, str(summary_path))
-
         # ##: Log summary to AIM.
-        if search_aim_logger and search_aim_logger.run:
-            search_aim_logger.log_params(summary, prefix="search_summary")
-            if best_value is not None:
-                search_aim_logger.log_metric("best_mean_reward", best_value)
+        search_aim_logger.log_params(summary, prefix="search_summary")
+        if best_value is not None:
+            search_aim_logger.log_metric("best_mean_reward", best_value)
 
         # ##: Generate, save, and log visualizations.
         self._save_and_log_visualizations(search_aim_logger)
@@ -309,7 +256,7 @@ class HyperparameterSearch:
 
         return summary
 
-    def run_search(self, search_config_path: Union[str, Path], n_trials: int = 20) -> Dict[str, Any]:
+    def run_search(self, search_config_path: Union[str, Path], n_trials: int = 20) -> Optional[Dict[str, Any]]:
         """
         Run a hyperparameter search using Optuna.
 
@@ -325,7 +272,7 @@ class HyperparameterSearch:
 
         Returns
         -------
-        Dict[str, Any]
+        Dict[str, Any] | None
             Dictionary containing the search summary.
 
         Raises
@@ -339,7 +286,7 @@ class HyperparameterSearch:
         """
         search_aim_logger = None
         try:
-            search_aim_logger = self._setup_search_logging(search_config_path, n_trials)
+            search_aim_logger = self._setup_search_logging(Path(search_config_path).stem, n_trials)
             self._load_configs(search_config_path, search_aim_logger)
 
             # ##: Create or load study.
@@ -352,7 +299,7 @@ class HyperparameterSearch:
             if not isinstance(exc, RuntimeError) or "Optuna optimization failed" not in str(exc):
                 logger.error(f"Hyperparameter search failed: {exc}\n{format_exc()}")
 
-            if search_aim_logger and search_aim_logger.run:
+            if search_aim_logger:
                 search_aim_logger.log_text(f"Search failed: {exc}\n{format_exc()}", name="error_log")
             raise
         finally:
@@ -414,7 +361,7 @@ class HyperparameterSearch:
 
         return params
 
-    def _prepare_trial_config(self, params: Dict[str, Any], trial: Trial) -> tuple[Path, list[str]]:
+    def _prepare_trial_config(self, params: Dict[str, Any], trial: Trial) -> tuple[Dict[str, Any], list[str]]:
         """
         Prepare and save the configuration for a specific trial.
 
@@ -431,58 +378,30 @@ class HyperparameterSearch:
 
         Returns
         -------
-        tuple[Path, list[str]]
-            A tuple containing the path to the saved configuration file and a list of AIM tags.
-
-        Raises
-        ------
-        TypeError
-            If the experiment configuration is not a dictionary.
-        IOError
-            If there are issues saving the configuration file.
-        Exception
-            If there are unexpected errors during the configuration preparation.
+        tuple[Dict[str, Any], list[str]]
+            A tuple containing the configuration dictionary and a list of AIM tags.
         """
-        if not self.base_config:
-            logger.warning("No base configuration specified, using empty configuration")
-            self.base_config = {}
-
         experiment_config = self._create_experiment_config(self.base_config, params)
-        if not isinstance(experiment_config, dict):
-            logger.error(
-                f"Failed to create a valid dictionary for experiment config. Base: {self.base_config}, Params: {params}"
-            )
-            raise TypeError(f"Expected experiment_config to be a dict, got {type(experiment_config)}")
-
-        # ##: Generate unique ID and AIM details.
-        experiment_id = f"trial_{trial.number}"
-        aim_run_name = f"{self.search_name}_{experiment_id}"
-        aim_tags = ["hyperparameter-search", "trial", str(self.search_name), f"trial_{trial.number}"]
-        agent_type = self.base_config.get("agent", {}).get("agent_type", "unknown_agent")
-        aim_tags.append(agent_type)
+        aim_tags = [
+            "hyperparameter-search",
+            "trial",
+            str(self.search_name),
+            f"trial_{trial.number}",
+            self.base_config.get("agent", {}).get("agent_type", "unknown_agent"),
+        ]
 
         # ##: Add trial info and sampled params to config.
         experiment_config["_trial_info"] = {"number": trial.number, "optuna_params": trial.params}
         experiment_config["sampled_hyperparameters"] = params
-
-        # ##: Save trial-specific configuration.
-        config_path = self.results_dir / f"{experiment_id}_config.yaml"
-        try:
-            self.config_manager.save_config(experiment_config, str(config_path))
-        except IOError as exc:
-            logger.error(f"Failed to save trial config {config_path}: {exc}")
-            raise
-        except Exception as exc:
-            logger.error(f"Unexpected error saving trial config {config_path}: {exc}")
-            raise
+        experiment_config["aim_experiment_name"] = f"hyperparameter_{self.search_name}_trial_{trial.number}"
 
         logger.info(f"\n--- Running Trial {trial.number} ---")
         logger.info(f"Parameters: {params}")
-        logger.info(f"AIM Run Name: {aim_run_name}")
+        logger.info(f"AIM Run Name: {experiment_config['aim_experiment_name']}")
 
-        return config_path, list(set(aim_tags))
+        return experiment_config, list(set(aim_tags))
 
-    def _execute_trial(self, trial: Trial, config_path: Path, aim_tags: list[str]) -> float:
+    def _execute_trial(self, trial: Trial, experiment_config: Dict[str, Any], aim_tags: list[str]) -> float:
         """
         Define pruning callback and execute the experiment for the trial.
 
@@ -493,8 +412,8 @@ class HyperparameterSearch:
         ----------
         trial : optuna.Trial
             Current trial object.
-        config_path : Path
-            Path to the trial-specific configuration file.
+        experiment_config : Dict[str, Any]
+            Dictionary containing the experiment configuration.
         aim_tags : list[str]
             List of AIM tags for the experiment.
 
@@ -507,10 +426,6 @@ class HyperparameterSearch:
         ------
         TrialPruned
             If the trial is pruned by the pruning callback.
-        FileNotFoundError
-            If the experiment configuration file is not found.
-        Exception
-            If there are errors during the experiment execution.
         """
 
         def pruning_callback(step: int, value: float):
@@ -527,7 +442,9 @@ class HyperparameterSearch:
 
         try:
             experiment_results = self.experiment_runner.run_experiment(
-                config_path, pruning_callback=pruning_callback, aim_tags=aim_tags
+                experiment_config=ExperimentConfig(**experiment_config),
+                pruning_callback=pruning_callback,
+                aim_tags=aim_tags,
             )
 
             objective_value = experiment_results.get("final_mean_reward", experiment_results.get("mean_reward", 0.0))
@@ -537,12 +454,6 @@ class HyperparameterSearch:
         except TrialPruned:
             logger.info(f"Trial {trial.number} was pruned.")
             raise
-        except FileNotFoundError as exc:
-            logger.error(f"Experiment config file not found for trial {trial.number}: {exc}")
-            return -float("inf")
-        except Exception as exc:
-            logger.error(f"Error running experiment for trial {trial.number}: {exc}\n{format_exc()}")
-            return -float("inf")
 
     def _objective(self, trial: Trial) -> float:
         """
@@ -560,17 +471,10 @@ class HyperparameterSearch:
         float
             Mean reward (objective value) for the trial.
         """
-        try:
-            params = self._sample_hyperparameters(trial)
-            config_path, aim_tags = self._prepare_trial_config(params, trial)
+        params = self._sample_hyperparameters(trial)
+        experiment_config, aim_tags = self._prepare_trial_config(params, trial)
 
-            return self._execute_trial(trial, config_path, aim_tags)
-
-        except TrialPruned:
-            raise
-        except Exception as exc:
-            logger.error(f"Critical error in objective function for trial {trial.number}: {exc}\n{format_exc()}")
-            return -float("inf")
+        return self._execute_trial(trial, experiment_config, aim_tags)
 
     def _save_and_log_visualizations(self, search_aim_logger: Optional[AimLogger]) -> None:
         """
@@ -607,20 +511,13 @@ class HyperparameterSearch:
         for name, plot_func in plot_functions.items():
             try:
                 fig = plot_func(self.study)
-                img_path = vis_dir / f"{name}.png"
-                fig.write_image(str(img_path))
-                logger.info(f"Saved visualization: {img_path}")
+                logger.info(f"Saved {name} visualization")
 
                 # ##: Log the saved image to the search-level AIM run.
                 if search_aim_logger and search_aim_logger.run:
                     try:
-                        with open(img_path, "rb") as f_img:
-                            aim_image = Image(f_img.read(), format="png", caption=f"Optuna {name} plot")
-                            search_aim_logger.log_image(aim_image, name=f"optuna_{name}_plot")
-                    except FileNotFoundError:
-                        logger.error(f"Could not find visualization file '{img_path}' to log to AIM.")
-                    except IOError as io_err:
-                        logger.error(f"Could not read visualization file '{img_path}' for AIM logging: {io_err}")
+                        aim_image = Image(fig, caption=f"Optuna {name} plot")
+                        search_aim_logger.log_image(aim_image, name=f"optuna_{name}_plot")
                     except Exception as aim_exc:
                         logger.error(f"Could not log visualization '{name}' to AIM: {aim_exc}")
 
@@ -630,8 +527,6 @@ class HyperparameterSearch:
                 logger.warning(f"Could not generate visualization '{name}' (possibly insufficient data): {ve}")
             except RuntimeError as rte:
                 logger.error(f"Runtime error generating visualization '{name}': {rte}")
-            except Exception as exc:
-                logger.error(f"An unexpected error occurred during visualization '{name}': {exc}")
 
     @staticmethod
     def _create_experiment_config(base_config: Dict[str, Any], hyperparameters: Dict[str, Any]) -> Dict[str, Any]:
@@ -682,12 +577,11 @@ def main():
     # ##: Parse command line arguments.
     parser = ArgumentParser(description="Run a hyperparameter search for reinforcement learning experiments")
     parser.add_argument("config", help="Path to the search configuration file")
-    parser.add_argument("--config-dir", help="Directory containing configuration files")
     parser.add_argument("--trials", type=int, default=20, help="Number of trials to run")
     args = parser.parse_args()
 
     # ##: Create hyperparameter search.
-    search = HyperparameterSearch(args.config_dir)
+    search = HyperparameterSearch()
 
     # ##: Run the search.
     search.run_search(args.config, n_trials=args.trials)

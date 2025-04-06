@@ -9,13 +9,11 @@ training, and logging (via AIM).
 
 import sys
 from argparse import ArgumentParser
-from pathlib import Path
 from time import time
 from traceback import format_exc
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from loguru import logger
-from pydantic import ValidationError
 
 from reinforce.agents import A2CAgent
 from reinforce.configs import ConfigManager
@@ -44,23 +42,12 @@ class ExperimentRunner:
     It supports logging via AIM, Optuna pruning, and saving experiment results.
     """
 
-    def __init__(self, config_dir: Optional[str] = None):
-        """
-        Initialize the experiment runner.
-
-        Parameters
-        ----------
-        config_dir : str, optional
-            Directory containing configuration files. If None, defaults to built-in configurations.
-        """
-        self.config_manager = ConfigManager(config_dir)
-
     def _setup_experiment(
         self,
-        experiment_config_path: Union[str, Path],
+        experiment_config: ExperimentConfig,
         pruning_callback: Optional[Callable[[int, float], None]] = None,
         aim_tags: Optional[List[str]] = None,
-    ) -> Tuple[ExperimentConfig, BaseTrainer, Optional[AimLogger]]:
+    ) -> Tuple[BaseTrainer, AimLogger]:
         """
         Set up the experiment components: configuration, environment, agent, trainer and logger.
 
@@ -70,8 +57,8 @@ class ExperimentRunner:
 
         Parameters
         ----------
-        experiment_config_path : Union[str, Path]
-            Path to the experiment configuration file (YAML or JSON).
+        experiment_config : ExperimentConfig
+            The experiment configuration object.
         pruning_callback : Callable[[int, float], None, optional
             Callback function for Optuna pruning. Takes (step, value) parameters.
         aim_tags : List[str], optional
@@ -79,57 +66,40 @@ class ExperimentRunner:
 
         Returns
         -------
-        Tuple[ExperimentConfig, BaseTrainer, Optional[AimLogger]]
-            A tuple containing the validated Pydantic configuration object, the initialized trainer,
-            and the AIM logger.
-
-        Raises
-        ------
-        ValueError
-            If configuration loading or validation fails.
+        Tuple[BaseTrainer, AimLogger]
+            A tuple containing the initialized trainer, and the AIM logger.
         """
-        try:
-            config = self.config_manager.load_experiment_config(str(experiment_config_path))
-        except (FileNotFoundError, ValueError, ValidationError) as e:
-            logger.error(f"Failed to load or validate experiment config '{experiment_config_path}': {e}")
-            raise ValueError(f"Configuration error: {e}") from e
-
         # ##: Initialize AIM Logger.
-        experiment_name = Path(experiment_config_path).stem
-        base_tags = ["reinforce", config.agent.agent_type]
+        base_tags = ["reinforce", experiment_config.agent.agent_type]
         if aim_tags:
             base_tags.extend(aim_tags)
+        aim_logger = AimLogger(experiment_name=experiment_config.aim_experiment_name, tags=list(set(base_tags)))
 
-        aim_logger = AimLogger(
-            experiment_name=config.aim_experiment_name or experiment_name, tags=list(set(base_tags))
+        # ##: Log Pydantic models by dumping them to dicts.
+        aim_logger.log_params(
+            experiment_config.model_dump(exclude={"agent", "trainer", "environment"}), prefix="experiment"
+        )
+        aim_logger.log_params(experiment_config.agent.model_dump(), prefix="agent")
+        aim_logger.log_params(experiment_config.environment.model_dump(), prefix="environment")
+        aim_logger.log_params(
+            experiment_config.trainer.model_dump(exclude={"_trial_info", "_pruning_callback"}), prefix="trainer"
         )
 
-        if not aim_logger.run:
-            logger.info("Failed to initialize AIM logger. Proceeding without AIM tracking.")
-        else:
-            # ##: Log Pydantic models by dumping them to dicts.
-            aim_logger.log_params(config.model_dump(exclude={"agent", "trainer", "environment"}), prefix="experiment")
-            aim_logger.log_params(config.agent.model_dump(), prefix="agent")
-            aim_logger.log_params(config.environment.model_dump(), prefix="environment")
-            aim_logger.log_params(
-                config.trainer.model_dump(exclude={"_trial_info", "_pruning_callback"}), prefix="trainer"
-            )
-
         # ##: Set up the environment, agent, and trainer using Pydantic config objects.
-        environment = self._create_environment(config.environment)
-        agent = self._create_agent(config.agent, environment.action_space.n)
+        environment = self._create_environment(experiment_config.environment)
+        agent = self._create_agent(experiment_config.agent, environment.action_space.n)
 
         # ##: Pass pruning callback directly if Optuna trial info exists in the config.
-        if config.trial_info is not None:
-            config.trainer.pruning_callback = pruning_callback
+        if experiment_config.trial_info is not None:
+            experiment_config.trainer.pruning_callback = pruning_callback
 
-        trainer = self._create_trainer(config.trainer, agent, environment, aim_logger)
+        trainer = self._create_trainer(experiment_config.trainer, agent, environment, aim_logger)
 
-        return config, trainer, aim_logger
+        return trainer, aim_logger
 
     def run_experiment(
         self,
-        experiment_config_path: Union[str, Path],
+        experiment_config: ExperimentConfig,
         pruning_callback: Optional[Callable[[int, float], None]] = None,
         aim_tags: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
@@ -141,8 +111,8 @@ class ExperimentRunner:
 
         Parameters
         ----------
-        experiment_config_path : str | Path
-            Path to the experiment configuration file (YAML or JSON).
+        experiment_config : ExperimentConfig
+            ExperimentConfig object containing all configuration parameters for the experiment.
         pruning_callback : callable, optional
             Callback function for Optuna pruning. Takes (step, value) parameters.
         aim_tags : List[str], optional
@@ -167,7 +137,7 @@ class ExperimentRunner:
 
         try:
             # ##: Setup experiment components using the helper method.
-            config, trainer, aim_logger = self._setup_experiment(experiment_config_path, pruning_callback, aim_tags)
+            trainer, aim_logger = self._setup_experiment(experiment_config, pruning_callback, aim_tags)
 
             # ##: Run the training.
             results = trainer.train()
@@ -175,31 +145,17 @@ class ExperimentRunner:
             # ##: Calculate and log duration.
             end_time = time()
             duration_seconds = end_time - start_time
-            if aim_logger and aim_logger.run:
+            if aim_logger:
                 aim_logger.log_metric("experiment_duration_seconds", duration_seconds)
                 aim_logger.log_params({"experiment_duration_readable": f"{duration_seconds:.2f}s"})
             logger.info(f"Experiment duration: {duration_seconds:.2f} seconds")
-
-            # ##: Save results if specified in the Pydantic config.
-            if config.save_results:
-                config.results_dir.mkdir(parents=True, exist_ok=True)
-
-                experiment_name = Path(experiment_config_path).stem
-                results_path = config.results_dir / f"{experiment_name}_results.json"
-
-                # ##: save_config now expects a dict, results is already a dict.
-                self.config_manager.save_config(results, str(results_path))
 
             return results
 
         except Exception as exc:
             logger.error(f"An error occurred during the experiment: {exc}")
-            if aim_logger and aim_logger.run:
+            if aim_logger:
                 aim_logger.log_text(f"Experiment failed: {exc}\n{format_exc()}", name="error_log")
-                aim_logger.close()
-
-            # ##: Ensure AIM logger is closed on error.
-            if aim_logger and aim_logger.run:
                 aim_logger.close()
             sys.exit(1)
 
@@ -323,10 +279,12 @@ def main():
     args = parser.parse_args()
 
     # ##: Create experiment runner.
-    runner = ExperimentRunner(args.config_dir)
+    runner = ExperimentRunner()
 
     # ##: Run the experiment with optional AIM args.
-    results = runner.run_experiment(args.config, aim_tags=args.tags)
+    results = runner.run_experiment(
+        experiment_config=ConfigManager.load_experiment_config(args.config), aim_tags=args.tags
+    )
 
     # ##: Print summary of results.
     logger.info("Experiment complete!")

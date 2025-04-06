@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from statistics import mean
 from time import time
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 import numpy as np
 import tensorflow as tf
@@ -21,9 +21,7 @@ from reinforce.core.base_environment import BaseEnvironment
 from reinforce.core.base_trainer import BaseTrainer
 from reinforce.utils.aim_logger import AimLogger
 from reinforce.utils.logging_setup import setup_logger
-from reinforce.utils.preprocessing import (
-    preprocess_observation,  # Ensure this is imported
-)
+from reinforce.utils.preprocessing import preprocess_observation
 
 setup_logger()
 
@@ -37,13 +35,7 @@ class EpisodeTrainer(BaseTrainer):
     """
 
     def __init__(
-        self,
-        agent: BaseAgent,
-        environment: BaseEnvironment,
-        config: EpisodeTrainerConfig,
-        *,
-        callbacks: Optional[List[Callable]] = None,
-        aim_logger: Optional[AimLogger] = None,
+        self, *, agent: BaseAgent, environment: BaseEnvironment, config: EpisodeTrainerConfig, aim_logger: AimLogger
     ):
         """
         Initialize the episode trainer.
@@ -56,24 +48,16 @@ class EpisodeTrainer(BaseTrainer):
             The environment to train in.
         config : EpisodeTrainerConfig
             Pydantic configuration model for the trainer.
-        callbacks : list of callable, optional
-            Optional callbacks to invoke during training.
-        aim_logger : AimLogger, optional
+        aim_logger : AimLogger
             AIM logger instance for experiment tracking.
         """
         self.agent = agent
         self.environment = environment
-        self.callbacks = callbacks or []
         self.aim_logger = aim_logger
-        self.config: EpisodeTrainerConfig = config  # ##: Store Pydantic model.
-
-        # ##: Access attributes directly from the Pydantic model.
-        self.save_dir = self.config.save_dir
-        self._trial_info = self.config.trial_info
-        self._pruning_callback = self.config.pruning_callback
+        self.config = config
 
         # ##: Ensure the save directory exists.
-        self.save_dir.mkdir(parents=True, exist_ok=True)
+        self.config.save_dir.mkdir(parents=True, exist_ok=True)
 
         # ##: Initialize training state.
         self.episode = 0
@@ -83,10 +67,10 @@ class EpisodeTrainer(BaseTrainer):
         # ##: Timestamp for saving models (can be useful even with AIM).
         self.timestamp = int(datetime.now().timestamp())
 
-        # ##: Log hyperparameters to AIM if logger is provided.
-        if self.aim_logger:
-            trainer_hparams_to_log = self.config.model_dump(exclude={"trial_info", "pruning_callback", "trainer_type"})
-            self.aim_logger.log_params(trainer_hparams_to_log, prefix="trainer")
+        # ##: Log hyperparameters to AIM.
+        self.aim_logger.log_params(
+            self.config.model_dump(exclude={"trial_info", "pruning_callback", "trainer_type"}), prefix="trainer"
+        )
 
     def train(self) -> Dict[str, Any]:
         """
@@ -108,32 +92,10 @@ class EpisodeTrainer(BaseTrainer):
             episode_steps = 0
 
             # ##: Store experiences for batch updates (store raw obs).
-            observations = []
-            actions = []
-            rewards = []
-            next_observations = []
-            dones = []
-            agent_infos = []
+            observations, actions, rewards, next_observations, dones, agent_infos = [], [], [], [], [], []
 
             # ##: Run one episode.
             for step in range(self.config.max_steps_per_episode):
-                # ##: Log environment image periodically (use raw observation).
-                if (
-                    self.aim_logger
-                    and self.config.log_env_image_frequency > 0
-                    and self.total_steps % self.config.log_env_image_frequency == 0
-                ):
-                    try:
-                        self.aim_logger.log_image(
-                            observation,
-                            name="environment_observation",
-                            step=self.total_steps,
-                            epoch=self.episode,
-                            caption=f"Episode {self.episode}, Step {step}",
-                        )
-                    except Exception as exc:
-                        logger.warning(f"Could not log environment image: {exc}")
-
                 # ##: Run one step in the environment (using raw observation).
                 next_observation, reward, done, action, agent_info = self._run_episode_step(observation, step)
 
@@ -176,26 +138,20 @@ class EpisodeTrainer(BaseTrainer):
             # ##: Save the agent checkpoint periodically.
             if (self.episode + 1) % self.config.save_frequency == 0:
                 checkpoint_path = (
-                    self.save_dir / f"{self.agent.name}_{self.environment.name}_{self.timestamp}_{self.episode + 1}"
+                    self.config.save_dir
+                    / f"{self.agent.name}_{self.environment.name}_{self.timestamp}_{self.episode + 1}"
                 )
                 self.save_checkpoint(checkpoint_path)
-
-            # ##: Invoke callbacks.
-            for callback in self.callbacks:
-                callback(
-                    trainer=self, episode=self.episode, episode_reward=episode_reward, episode_steps=episode_steps
-                )
 
         # ##: Final evaluation after training loop.
         final_eval_metrics = self.evaluate(self.config.num_eval_episodes)
         logger.info(f"Final Evaluation Mean Reward: {final_eval_metrics['mean_reward']:.2f}")
-        if self.aim_logger:
-            self.aim_logger.log_metrics(
-                {f"final_{k}": v for k, v in final_eval_metrics.items() if k != "rewards"},
-                step=self.total_steps,
-                epoch=self.episode + 1,
-            )
-            self.aim_logger.log_params({"final_total_steps": self.total_steps, "final_episodes": self.episode + 1})
+        self.aim_logger.log_metrics(
+            {f"final_{k}": v for k, v in final_eval_metrics.items() if k != "rewards"},
+            step=self.total_steps,
+            epoch=self.episode + 1,
+        )
+        self.aim_logger.log_params({"final_total_steps": self.total_steps, "final_episodes": self.episode + 1})
 
         return {
             "episodes": self.episode + 1,
@@ -209,11 +165,7 @@ class EpisodeTrainer(BaseTrainer):
     def _run_episode_step(self, observation: Any, step: int) -> tuple:
         """Runs a single step within an episode."""
         # ##: Log environment image periodically.
-        if (
-            self.aim_logger
-            and self.config.log_env_image_frequency > 0
-            and self.total_steps % self.config.log_env_image_frequency == 0
-        ):
+        if self.config.log_env_image_frequency > 0 and self.total_steps % self.config.log_env_image_frequency == 0:
             try:
                 self.aim_logger.log_image(
                     observation,
@@ -237,7 +189,7 @@ class EpisodeTrainer(BaseTrainer):
         rewards: List,
         next_observations: List,
         dones: List,
-        agent_infos: List[Dict],  # Takes the list of agent_infos collected
+        agent_infos: List[Dict],
     ) -> None:
         """Handles the agent learning step and associated logging using tf.data."""
         # ##: Preprocess observations and next_observations here.
@@ -258,9 +210,6 @@ class EpisodeTrainer(BaseTrainer):
 
         # ##: Logging needs access to the last agent_info from the batch.
         last_agent_info = agent_infos[-1] if agent_infos else {}
-
-        if not self.aim_logger:
-            return
 
         # ##: Log agent learning info.
         if learn_info and isinstance(learn_info, dict):
@@ -296,24 +245,21 @@ class EpisodeTrainer(BaseTrainer):
     def _log_episode_metrics(self, episode_reward: float, episode_steps: int, start_time: float) -> float:
         """Logs episode metrics to console and AIM."""
         self.episode_rewards.append(episode_reward)
-        mean_reward_100 = mean(self.episode_rewards) if self.episode_rewards else 0
+        mean_reward = mean(self.episode_rewards) if self.episode_rewards else 0
 
         # ##: Log to console.
         if (self.episode + 1) % self.config.log_frequency == 0:
-            self._log_progress(episode_reward, episode_steps, mean_reward_100, start_time)
+            self._log_progress(episode_reward, episode_steps, mean_reward, start_time)
 
         # ##: Log to AIM.
-        if self.aim_logger:
-            metrics_to_log = {
-                "episode_reward": episode_reward,
-                "episode_steps": episode_steps,
-                "mean_reward_100": mean_reward_100,
-            }
-            self.aim_logger.log_metrics(
-                metrics_to_log, step=self.total_steps, epoch=self.episode + 1, context={"subset": "train"}
-            )
+        self.aim_logger.log_metrics(
+            {"episode_reward": episode_reward, "episode_steps": episode_steps, "mean_reward_100": mean_reward},
+            step=self.total_steps,
+            epoch=self.episode + 1,
+            context={"subset": "train"},
+        )
 
-        return mean_reward_100
+        return mean_reward
 
     def _handle_evaluation_and_pruning(self) -> bool:
         """Handles periodic evaluation and Optuna pruning. Returns True if pruned."""
@@ -328,20 +274,21 @@ class EpisodeTrainer(BaseTrainer):
             )
 
             # ##: Log evaluation metrics to AIM.
-            if self.aim_logger:
-                aim_eval_metrics = {
+            self.aim_logger.log_metrics(
+                {
                     "eval_mean_reward": mean_eval_reward,
                     "eval_max_reward": eval_metrics["max_reward"],
                     "eval_min_reward": eval_metrics["min_reward"],
-                }
-                self.aim_logger.log_metrics(
-                    aim_eval_metrics, step=self.total_steps, epoch=self.episode + 1, context={"subset": "eval"}
-                )
+                },
+                step=self.total_steps,
+                epoch=self.episode + 1,
+                context={"subset": "eval"},
+            )
 
             # ##: Report to Optuna for pruning.
-            if self._pruning_callback is not None and self._trial_info is not None:
+            if self.config.pruning_callback is not None and self.config.trial_info is not None:
                 try:
-                    self._pruning_callback(self.episode + 1, mean_eval_reward)
+                    self.config.pruning_callback(self.episode + 1, mean_eval_reward)
                 except Exception as exc:
                     logger.warning(f"Trial pruned at episode {self.episode + 1}: {exc}")
                     return True
@@ -416,47 +363,18 @@ class EpisodeTrainer(BaseTrainer):
             "timestamp": self.timestamp,
         }
 
-        # ##: Use save instead of savez for single dictionary object.
-        state_path = path_obj / "trainer_state.npy"
-        np.save(state_path, trainer_state)
-
         # ##: Log checkpoint artifact info to AIM.
-        if self.aim_logger:
-            self.aim_logger.log_artifact(
-                artifact_data=trainer_state,
-                name=f"checkpoint_ep{self.episode + 1}",
-                path=str(path_obj.resolve()),
-                meta={
-                    "episode": self.episode + 1,
-                    "total_steps": self.total_steps,
-                    "agent_save_path": str(agent_path.resolve()),
-                    "trainer_state_path": str(state_path.resolve()),
-                },
-            )
+        self.aim_logger.log_artifact(
+            artifact_data=trainer_state,
+            name=f"checkpoint_episode_{self.episode + 1}",
+            path=str(path_obj.resolve()),
+            meta={
+                "episode": self.episode + 1,
+                "total_steps": self.total_steps,
+                "agent_save_path": str(agent_path.resolve()),
+            },
+        )
         logger.info(f"Checkpoint saved to: {path_obj}")
-
-    def load_checkpoint(self, path: Union[str, Path]) -> None:
-        """
-        Load the training state from the specified path.
-
-        Parameters
-        ----------
-        path : str or Path
-            Directory path to load the training state from.
-        """
-        path_obj = Path(path)
-        self.agent.load(str(path_obj / "agent"))
-
-        # ##: Load trainer state.
-        # ##: Use .item() to extract dictionary if saved within a 0-d array previously, or load directly.
-        try:
-            trainer_state = np.load(path_obj / "trainer_state.npy", allow_pickle=True).item()
-        except AttributeError:
-            trainer_state = np.load(path_obj / "trainer_state.npy", allow_pickle=True)
-
-        self.episode = trainer_state["episode"]
-        self.total_steps = trainer_state["total_steps"]
-        self.timestamp = trainer_state.get("timestamp", self.timestamp)
 
     def _log_progress(
         self, episode_reward: float, episode_steps: int, mean_reward_100: float, start_time: float

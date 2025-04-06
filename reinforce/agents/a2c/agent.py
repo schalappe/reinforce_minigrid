@@ -7,7 +7,6 @@ import json
 import os
 from typing import Any, Dict, Tuple
 
-import numpy as np
 import tensorflow as tf
 from keras import models, optimizers
 from numpy import ndarray
@@ -46,8 +45,6 @@ class A2CAgent(BaseAgent):
         self._model = A2CModel(action_space=action_space, embedding_size=self.hyperparameters.embedding_size)
         self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters.learning_rate)
 
-        self.step_counter = 0
-
     def act(self, observation: ndarray, training: bool = True) -> Tuple[int, Dict[str, Any]]:
         """
         Select an action based on the current observation.
@@ -84,13 +81,13 @@ class A2CAgent(BaseAgent):
             "action_logits": action_logits[0].numpy(),
         }
 
-    def learn(self, batch_tensors: Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]) -> Dict[str, Any]:
+    def learn(self, experience_batch: Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]) -> Dict[str, Any]:
         """
         Update the agent based on a batch of experiences provided as tensors.
 
         Parameters
         ----------
-        batch_tensors : Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
+        experience_batch : Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
             A tuple containing batches of tensors:
             (observations, actions, rewards, next_observations, dones).
             Observations and next_observations are expected to be preprocessed.
@@ -102,14 +99,13 @@ class A2CAgent(BaseAgent):
         """
         # ##: Unpack tensors from the dataset batch.
         # ##: Data is already preprocessed and in tensor format.
-        observations, actions, rewards, next_observations, dones = batch_tensors
+        observations, actions, rewards, next_observations, dones = experience_batch
 
         # ##: Compute returns and advantages using the input tensors directly.
         returns, advantages = self._compute_returns_and_advantages(rewards, dones, observations, next_observations)
 
         # ##: Perform one training step.
         metrics = self._train_step(observations, actions, returns, advantages)
-        self.step_counter += 1
 
         return metrics
 
@@ -249,12 +245,6 @@ class A2CAgent(BaseAgent):
         # ##: Save the model.
         self._model.save(os.path.join(path, f"{self._name}_model.keras"))
 
-        # ##: Save the optimizer state (weights are saved separately).
-        # Note: Optimizer state saving/loading might require more complex handling
-        # depending on the TF version and optimizer type. For simplicity, we omit it here
-        # but save the step counter which might be related.
-        np.save(os.path.join(path, "step_counter.npy"), self.step_counter)
-
         # ##: Save the hyperparameters by dumping the Pydantic model to JSON.
         hyperparams_path = os.path.join(path, "hyperparams.json")
         with open(hyperparams_path, "w", encoding="utf-8") as file:
@@ -271,9 +261,6 @@ class A2CAgent(BaseAgent):
         """
         # ##: Load the model.
         self._model = models.load_model(os.path.join(path, f"{self._name}_model.keras"))
-
-        # ##: Load the optimizer state (see note in save method).
-        self.step_counter = np.load(os.path.join(path, "step_counter.npy")).item()
 
         # ##: Load the hyperparameters from JSON and parse into Pydantic model.
         hyperparams_path = os.path.join(path, "hyperparams.json")

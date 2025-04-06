@@ -5,7 +5,7 @@ Configuration management for the reinforcement learning framework.
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Union
 
 import yaml
 from pydantic import BaseModel, ValidationError
@@ -20,16 +20,6 @@ class ConfigManager:
     This class provides functionality for loading, validating, and managing configurations
     for agents, environments, trainers, and experiments.
     """
-
-    def __init__(self, config_dir: Optional[str] = None):
-        """Initialize the configuration manager.
-
-        Parameters
-        ----------
-        config_dir : str, optional
-            Directory containing configuration files
-        """
-        self.config_dir = Path(config_dir) if config_dir else Path(__file__).parent / "default_configs"
 
     @staticmethod
     def load_config(path: str) -> Dict[str, Any]:
@@ -105,7 +95,8 @@ class ConfigManager:
         else:
             raise ValueError(f"Unsupported file format: {file_ext}")
 
-    def load_experiment_config(self, path: str) -> ExperimentConfig:
+    @classmethod
+    def load_experiment_config(cls, path: str) -> ExperimentConfig:
         """
         Load and validate an experiment configuration using Pydantic.
 
@@ -126,7 +117,7 @@ class ConfigManager:
         ValueError
             If the file format is not supported or validation fails.
         """
-        raw_config = self.load_config(path)
+        raw_config = cls.load_config(path)
 
         try:
             # ##: Parse and validate the raw dictionary using the Pydantic model.

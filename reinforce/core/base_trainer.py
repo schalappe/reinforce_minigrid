@@ -4,10 +4,7 @@ Base interface for all trainers.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional
-
-from reinforce.core.base_agent import BaseAgent
-from reinforce.core.base_environment import BaseEnvironment
+from typing import Any, Dict
 
 
 class BaseTrainer(ABC):
@@ -17,29 +14,6 @@ class BaseTrainer(ABC):
     This abstract class defines the interface that all trainer implementations must adhere to.
     It provides a standard API for training agents in environments.
     """
-
-    @abstractmethod
-    def __init__(
-        self,
-        agent: BaseAgent,
-        environment: BaseEnvironment,
-        config: Dict[str, Any],
-        callbacks: Optional[List[Callable]] = None,
-    ):
-        """
-        Initialize the trainer.
-
-        Parameters
-        ----------
-        agent : BaseAgent
-            The agent to train.
-        environment : BaseEnvironment
-            The environment to train in.
-        config : dict
-            Configuration parameters for training.
-        callbacks : list of callable, optional
-            Callbacks to invoke during training.
-        """
 
     @abstractmethod
     def train(self) -> Dict[str, Any]:
@@ -75,15 +49,4 @@ class BaseTrainer(ABC):
         ----------
         path : str
             Directory path to save the training state.
-        """
-
-    @abstractmethod
-    def load_checkpoint(self, path: str) -> None:
-        """
-        Load the training state from the specified path.
-
-        Parameters
-        ----------
-        path : str
-            Directory path to load the training state from.
         """

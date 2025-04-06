@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 Example of running a hyperparameter search using Optuna for the A2C agent.
@@ -25,7 +24,6 @@ def main(search_config_path, n_trials=20):
     Args:
         search_config_path: Path to the search configuration file
         n_trials: Number of trials to run
-        timeout: Optional timeout in seconds
     """
     # Create output directories
     os.makedirs("outputs/hyperparameter_search", exist_ok=True)
@@ -70,7 +68,7 @@ if __name__ == "__main__":
         base_config = {
             "agent": {
                 "agent_type": "A2C",
-                "action_space": 6,
+                "action_space": 7,
                 "embedding_size": 128,
                 "learning_rate": 0.001,
                 "discount_factor": 0.99,
@@ -82,18 +80,17 @@ if __name__ == "__main__":
             },
             "trainer": {
                 "trainer_type": "EpisodeTrainer",
-                "max_episodes": 500,  # Reduced for the search
+                "max_episodes": 50,  # Reduced for the search
                 "max_steps_per_episode": 100,
                 "update_frequency": 50,
                 "eval_frequency": 100,
                 "num_eval_episodes": 5,
                 "gamma": 0.99,
-                "log_frequency": 100,
-                "save_frequency": 500,
+                "log_frequency": 50,
+                # "log_env_image_frequency": 50,
+                "save_frequency": 25,
                 "save_dir": "outputs/models"
-            },
-            "save_results": True,
-            "results_dir": "outputs/results"
+            }
         }
         
         # Create search configuration using Optuna format

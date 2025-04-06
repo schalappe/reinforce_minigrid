@@ -83,31 +83,16 @@ class AimLogger:
             logger.warning(f"AIM Run ({self.run_hash}) already initialized. Skipping re-initialization.")
             return
 
-        try:
-            self._run = Run(
-                repo=self._repo_path,
-                experiment=self._experiment_name,
-                system_tracking_interval=None,
-            )
-            logger.info(f"AIM Run initialized: Name='{self._run.name}', Hash='{self.run_hash}'")
+        self._run = Run(repo=self._repo_path, experiment=self._experiment_name)
+        logger.info(f"AIM Run initialized: Name='{self._run.name}', Hash='{self.run_hash}'")
 
-            # ##: Add tags if provided.
-            if self._tags:
-                current_tags = set(self._run.props.tags)
-                new_tags = set(self._tags)
-                for tag in new_tags - current_tags:
-                    try:
-                        self._run.add_tag(tag)
-                        logger.debug(f"Added tag '{tag}' to run {self.run_hash}")
-                    except Exception as exc:
-                        logger.error(f"Failed to add tag '{tag}' to run {self.run_hash}: {exc}")
-
-        except Exception as exc:
-            logger.error(
-                f"Fatal error initializing AIM Run (Experiment: '{self._experiment_name}', Repo: '{self._repo_path}'): {exc}",
-                exc_info=True,
-            )
-            self._run = None
+        # ##: Add tags if provided.
+        if self._tags:
+            current_tags = set(self._run.props.tags)
+            new_tags = set(self._tags)
+            for tag in new_tags - current_tags:
+                self._run.add_tag(tag)
+                logger.debug(f"Added tag '{tag}' to run {self.run_hash}")
 
     def _safe_run_operation(self, operation: Callable[..., Any], description: str, *args: Any, **kwargs: Any) -> bool:
         """
