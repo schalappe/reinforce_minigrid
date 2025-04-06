@@ -10,15 +10,15 @@ from typing import Annotated, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from reinforce.configs.models.a2c_config import A2CConfig
-from reinforce.configs.models.distributed_trainer_config import DistributedTrainerConfig
-from reinforce.configs.models.environment_config import EnvironmentConfig
-from reinforce.configs.models.episode_trainer_config import EpisodeTrainerConfig
+# ##: Import from sibling subpackages
+from ..agent import A2CConfig, PPOConfig
+from ..environment import EnvironmentConfig
+from ..trainer import DistributedTrainerConfig, EpisodeTrainerConfig, PPOTrainerConfig
 
 # ##: Define discriminated unions for agent and trainer configs.
-AgentConfigUnion = Annotated[Union[A2CConfig], Field(discriminator="agent_type")]
+AgentConfigUnion = Annotated[Union[A2CConfig, PPOConfig], Field(discriminator="agent_type")]
 TrainerConfigUnion = Annotated[
-    Union[EpisodeTrainerConfig, DistributedTrainerConfig], Field(discriminator="trainer_type")
+    Union[EpisodeTrainerConfig, DistributedTrainerConfig, PPOTrainerConfig], Field(discriminator="trainer_type")
 ]
 
 

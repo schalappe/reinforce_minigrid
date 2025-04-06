@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from reinforce.configs.models.agent_config import AgentConfig
+from .agent_config import AgentConfig
 
 
 class A2CConfig(AgentConfig):

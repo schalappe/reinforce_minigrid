@@ -1,0 +1,26 @@
+# Default configuration for the PPOTrainer
+trainer_type: ppo
+
+# PPO Training Loop Parameters
+n_steps: 2048       # Rollout length (steps collected before update)
+n_epochs: 10        # Number of optimization epochs per rollout
+batch_size: 64      # Minibatch size for updates
+max_total_steps: 1_000_000 # Total training steps
+
+# Environment Interaction
+max_steps_per_episode: 500 # Max steps within a single episode (can affect rollout collection if episodes are long)
+
+# Evaluation Parameters
+eval_frequency: 50       # Evaluate every N episodes
+num_eval_episodes: 10    # Number of episodes for each evaluation run
+
+# Logging Parameters
+log_frequency: 1         # Log progress every N episodes
+log_env_image_frequency: 0 # Log environment image every N steps (0 = disabled)
+
+# Checkpointing Parameters
+save_frequency: 100      # Save agent checkpoint every N episodes
+save_dir: "outputs/models/ppo" # Directory to save models (specific to PPO)
+
+# gamma: Inherited from agent config usually, but can be set here if needed
+# gamma: 0.99

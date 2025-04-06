@@ -2,23 +2,27 @@
 """
 Pydantic models for configurations.
 
-This module makes the core configuration models easily importable.
+This module makes the core configuration models easily importable by exposing them from their respective subpackages.
 """
 
-from .a2c_config import A2CConfig
-from .agent_config import AgentConfig
-from .distributed_trainer_config import DistributedTrainerConfig
-from .environment_config import EnvironmentConfig
-from .episode_trainer_config import EpisodeTrainerConfig
-from .experiment_config import AgentConfigUnion, ExperimentConfig, TrainerConfigUnion
-from .trainer_config import TrainerConfig
+from .agent import A2CConfig, AgentConfig, PPOConfig
+from .environment import EnvironmentConfig
+from .experiment import AgentConfigUnion, ExperimentConfig, TrainerConfigUnion
+from .trainer import (
+    DistributedTrainerConfig,
+    EpisodeTrainerConfig,
+    PPOTrainerConfig,
+    TrainerConfig,
+)
 
 __all__ = [
     "AgentConfig",
     "A2CConfig",
+    "PPOConfig",
     "TrainerConfig",
     "EpisodeTrainerConfig",
     "DistributedTrainerConfig",
+    "PPOTrainerConfig",
     "EnvironmentConfig",
     "ExperimentConfig",
     "AgentConfigUnion",

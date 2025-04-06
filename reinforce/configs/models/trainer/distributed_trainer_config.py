@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from reinforce.configs.models.trainer_config import TrainerConfig
+from .trainer_config import TrainerConfig
 
 
 class DistributedTrainerConfig(TrainerConfig):

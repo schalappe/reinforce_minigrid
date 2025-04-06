@@ -1,0 +1,23 @@
+# Default configuration for the PPO agent
+agent_type: ppo
+
+# Model parameters (shared with A2CModel)
+embedding_size: 128
+
+# Optimizer parameters
+learning_rate: 3e-4 # Often requires tuning, common starting point
+
+# PPO specific hyperparameters
+discount_factor: 0.99 # Gamma
+gae_lambda: 0.95 # Lambda for GAE
+clip_range: 0.2 # Epsilon for clipping
+entropy_coef: 0.01 # Entropy bonus coefficient
+value_coef: 0.5 # Value function loss coefficient
+max_grad_norm: 0.5 # Gradient clipping norm (set to null or remove to disable)
+
+# Adaptive KL Penalty (Optional)
+use_adaptive_kl: false # Set to true to enable
+target_kl: 0.01 # Target KL divergence
+initial_kl_coeff: 1.0 # Initial KL coefficient
+
+# action_space: Will be automatically set by the environment during initialization
