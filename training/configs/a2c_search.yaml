@@ -13,7 +13,7 @@ base_config:
   trainer:
     trainer_type: EpisodeTrainer
     max_episodes: 100
-    max_steps_per_episode: 5000
+    max_steps_per_episode: 500
     update_frequency: 10
     eval_frequency: 20
     num_eval_episodes: 5
