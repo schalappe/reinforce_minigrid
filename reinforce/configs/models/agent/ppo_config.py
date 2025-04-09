@@ -22,8 +22,6 @@ class PPOConfig(AgentConfig):
         Size of the embedding layer in the model. Default: 128.
     learning_rate: float
         Learning rate for the Adam optimizer. Default: 3e-4.
-    discount_factor: float
-        Discount factor for future rewards (gamma). Default: 0.99.
     gae_lambda: float
         Factor for Generalized Advantage Estimation (GAE). Default: 0.95.
     clip_range: float
@@ -45,7 +43,6 @@ class PPOConfig(AgentConfig):
     agent_type: Literal["PPO"] = "PPO"
     embedding_size: int = Field(128, description="Size of the embedding layer in the model")
     learning_rate: float = Field(3e-4, description="Learning rate for the Adam optimizer")
-    discount_factor: float = Field(0.99, alias="gamma", description="Discount factor for future rewards (gamma)")
     gae_lambda: float = Field(0.95, description="Factor for Generalized Advantage Estimation (GAE)")
     clip_range: float = Field(0.2, description="Clipping parameter epsilon for the PPO objective")
     entropy_coef: float = Field(0.01, description="Coefficient for the entropy bonus in the loss")
