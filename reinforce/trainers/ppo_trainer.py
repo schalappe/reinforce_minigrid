@@ -72,7 +72,7 @@ class PPOTrainer(BaseTrainer):
             buffer_size=self.config.n_steps,
             observation_shape=self.environment.observation_space.shape,
             action_shape=(),
-            gamma=self.agent.hyperparameters.discount_factor,
+            gamma=self.config.gamma,
             gae_lambda=self.agent.hyperparameters.gae_lambda,
         )
 
