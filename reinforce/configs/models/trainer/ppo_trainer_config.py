@@ -41,7 +41,7 @@ class PPOTrainerConfig(TrainerConfig):
     - Configuration is immutable once created (frozen=True)
     """
 
-    trainer_type: Literal["ppo"] = Field("ppo", description="Trainer type must be 'ppo'")
+    trainer_type: Literal["PPOTrainer"] = Field("PPOTrainer", description="Trainer type must be 'ppo'")
 
     # ##: PPO specific training loop parameters
     n_steps: int = Field(2048, ge=1, description="Number of steps to collect per rollout (buffer size)")

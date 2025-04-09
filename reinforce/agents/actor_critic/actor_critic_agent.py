@@ -11,7 +11,7 @@ from typing import Any, Dict, Tuple, Union
 from keras import models, optimizers
 from numpy import ndarray
 
-from reinforce.agents.actor_critic.model import A2CModel
+from reinforce.agents.actor_critic.model import ResNetA2CModel
 from reinforce.configs.models import A2CConfig, PPOConfig
 from reinforce.core.base_agent import BaseAgent
 
@@ -45,7 +45,7 @@ class ActorCriticAgent(BaseAgent):
 
         # ##: Common model and optimizer setup.
         # ##: Subclasses might override model creation if needed, but use A2CModel as default.
-        self._model = A2CModel(action_space=action_space, embedding_size=self.hyperparameters.embedding_size)
+        self._model = ResNetA2CModel(action_space=action_space, embedding_size=self.hyperparameters.embedding_size)
         self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters.learning_rate)
 
     @abstractmethod

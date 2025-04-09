@@ -6,6 +6,7 @@ PPO Agent implementation.
 from typing import Any, Dict, Tuple
 
 import tensorflow as tf
+import tensorflow_probability as tfp
 from numpy import ndarray
 
 from reinforce.agents.actor_critic.actor_critic_agent import (
@@ -75,7 +76,7 @@ class PPOAgent(ActorCriticAgent):  # Inherit from the new base class
         action_probs = tf.nn.softmax(action_logits)
 
         # ##: Sample action from the distribution.
-        action_dist = tf.compat.v1.distributions.Categorical(logits=action_logits)
+        action_dist = tfp.distributions.Categorical(logits=action_logits)
         action_tensor = action_dist.sample()
         action = action_tensor[0].numpy()
 
@@ -162,7 +163,7 @@ class PPOAgent(ActorCriticAgent):  # Inherit from the new base class
             values = tf.squeeze(values)  # Remove last dim
 
             # ##: Calculate current log probabilities and entropy.
-            action_dist = tf.compat.v1.distributions.Categorical(logits=action_logits)
+            action_dist = tfp.distributions.Categorical(logits=action_logits)
             log_probs_new = action_dist.log_prob(actions)
             entropy = tf.reduce_mean(action_dist.entropy())
 

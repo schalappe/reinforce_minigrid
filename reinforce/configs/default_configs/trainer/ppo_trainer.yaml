@@ -1,5 +1,5 @@
 # Default configuration for the PPOTrainer
-trainer_type: ppo
+trainer_type: PPOTrainer
 
 # PPO Training Loop Parameters
 n_steps: 2048       # Rollout length (steps collected before update)

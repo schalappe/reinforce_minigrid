@@ -1,0 +1,52 @@
+# training/configs/a2c_search.yaml
+base_config:
+  agent:
+    agent_type: A2C
+    action_space: 7
+    embedding_size: 128
+    learning_rate: 0.001
+    discount_factor: 0.99
+    entropy_coef: 0.01
+    value_coef: 0.5
+  environment:
+    use_image_obs: true
+  trainer:
+    trainer_type: EpisodeTrainer
+    max_episodes: 100
+    max_steps_per_episode: 5000
+    update_frequency: 10
+    eval_frequency: 20
+    num_eval_episodes: 5
+    gamma: 0.99
+    log_frequency: 10
+    log_env_image_frequency: 10000
+    save_frequency: 100
+    save_dir: outputs/models/a2c_search_temp
+
+hyperparameters:
+  agent.learning_rate:
+    type: float
+    low: 1.0e-5
+    high: 0.01
+    log_scale: true
+  agent.entropy_coef:
+    type: float
+    low: 0.0001
+    high: 0.1
+    log_scale: true
+  agent.discount_factor:
+    type: categorical
+    values:
+      - 0.9
+      - 0.95
+      - 0.99
+      - 0.995
+  agent.embedding_size:
+    type: int
+    low: 64
+    high: 256
+    step: 64
+  agent.value_coef:
+    type: float
+    low: 0.25
+    high: 0.75
