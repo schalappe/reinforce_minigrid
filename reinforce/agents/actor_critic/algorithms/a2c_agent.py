@@ -8,12 +8,12 @@ from typing import Any, Dict, Tuple
 import tensorflow as tf
 from numpy import ndarray
 
-from reinforce.agents.actor_critic.actor_critic_agent import ActorCriticAgent
+from reinforce.agents.actor_critic.core import ActorCriticAgent
 from reinforce.configs.models import A2CConfig
 from reinforce.utils.preprocessing import preprocess_observation
 
 
-class A2CAgent(ActorCriticAgent):  # Inherit from the new base class
+class A2CAgent(ActorCriticAgent):
     """
     A2C (Advantage Actor-Critic) agent implementation.
 
@@ -225,5 +225,15 @@ class A2CAgent(ActorCriticAgent):  # Inherit from the new base class
     def _load_specific_hyperparameters(self, config: Dict[str, Any]) -> A2CConfig:
         """
         Load specific hyperparameters for the A2C agent.
+
+        Parameters
+        ----------
+        config : Dict[str, Any]
+            Dictionary of hyperparameters.
+
+        Returns
+        -------
+        A2CConfig
+            A2CConfig object containing the hyperparameters.
         """
         return A2CConfig(**config)

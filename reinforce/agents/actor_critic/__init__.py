@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Actor-Critic agent implementations (A2C, PPO).
+Actor-Critic agents and core components.
 """
 
-from .a2c_agent import A2CAgent
-from .model import ResNetA2CModel
-from .ppo_agent import PPOAgent
+from .algorithms import A2CAgent, PPOAgent
+from .core import ActorCriticAgent, HyperparameterConfig, ResNetA2CModel
 
-__all__ = ["A2CAgent", "ResNetA2CModel", "PPOAgent"]
+__all__ = [
+    "A2CAgent",
+    "PPOAgent",
+    "ActorCriticAgent",
+    "HyperparameterConfig",
+    "ResNetA2CModel",
+]

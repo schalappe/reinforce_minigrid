@@ -11,7 +11,7 @@ from typing import Any, Dict, Tuple, Union
 from keras import models, optimizers
 from numpy import ndarray
 
-from reinforce.agents.actor_critic.model import ResNetA2CModel
+from reinforce.agents.actor_critic.core.model import ResNetA2CModel
 from reinforce.configs.models import A2CConfig, PPOConfig
 from reinforce.core.base_agent import BaseAgent
 
@@ -118,12 +118,28 @@ class ActorCriticAgent(BaseAgent):
         self._load_hyperparameters(path)
 
     def _load_model(self, path: str):
+        """
+        Load the Keras model from the specified path.
+
+        Parameters
+        ----------
+        path : str
+            Directory path to load the model from.
+        """
         model_path = os.path.join(path, f"{self._name}_model.keras")
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model file not found at {model_path}")
         self._model = models.load_model(model_path)
 
     def _load_hyperparameters(self, path: str):
+        """
+        Load the hyperparameters from the specified path.
+
+        Parameters
+        ----------
+        path : str
+            Directory path to load the hyperparameters from.
+        """
         hyperparams_path = os.path.join(path, "hyperparams.json")
         if not os.path.exists(hyperparams_path):
             raise FileNotFoundError(f"Hyperparameters file not found at {hyperparams_path}")
@@ -136,15 +152,41 @@ class ActorCriticAgent(BaseAgent):
 
     @property
     def name(self) -> str:
-        """Return the name of the agent."""
+        """
+        Return the name of the agent.
+
+        Returns
+        -------
+        str
+            The name of the agent.
+        """
         return self._name
 
     @property
     def model(self) -> models.Model:
-        """Return the underlying model used by the agent."""
+        """
+        Return the underlying model used by the agent.
+
+        Returns
+        -------
+        models.Model
+            The underlying model.
+        """
         return self._model
 
     @abstractmethod
     def _load_specific_hyperparameters(self, config: Dict[str, Any]) -> HyperparameterConfig:
-        """Load specific hyperparameters for the agent."""
+        """
+        Load specific hyperparameters for the agent.
+
+        Parameters
+        ----------
+        config : Dict[str, Any]
+            The configuration dictionary containing hyperparameters.
+
+        Returns
+        -------
+        HyperparameterConfig
+            The loaded hyperparameters.
+        """
         raise NotImplementedError

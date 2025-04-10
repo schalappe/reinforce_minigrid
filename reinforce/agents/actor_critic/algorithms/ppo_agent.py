@@ -10,15 +10,12 @@ import tensorflow_probability as tfp
 from loguru import logger
 from numpy import ndarray
 
-from reinforce.agents.actor_critic.actor_critic_agent import (
-    ActorCriticAgent,
-    HyperparameterConfig,
-)
+from reinforce.agents.actor_critic.core import ActorCriticAgent, HyperparameterConfig
 from reinforce.configs.models import PPOConfig
 from reinforce.utils.preprocessing import preprocess_observation
 
 
-class PPOAgent(ActorCriticAgent):  # Inherit from the new base class
+class PPOAgent(ActorCriticAgent):
     """
     PPO (Proximal Policy Optimization) agent implementation.
 
@@ -87,7 +84,6 @@ class PPOAgent(ActorCriticAgent):  # Inherit from the new base class
                 f"Action Logits: {action_logits.numpy()}, "
                 f"Action Space: {self.action_space}"
             )
-
 
         # ##: Calculate log probability of the sampled action.
         log_prob = action_dist.log_prob(action_tensor)[0].numpy()
@@ -239,4 +235,17 @@ class PPOAgent(ActorCriticAgent):  # Inherit from the new base class
         self.kl_coeff = tf.Variable(self.hyperparameters.initial_kl_coeff, trainable=False, dtype=tf.float32)
 
     def _load_specific_hyperparameters(self, config: Dict[str, Any]) -> HyperparameterConfig:
+        """
+        Load PPO-specific hyperparameters from the configuration dictionary.
+
+        Parameters
+        ----------
+        config: Dict[str, Any]
+            Dictionary containing the configuration parameters.
+
+        Returns
+        -------
+        HyperparameterConfig
+            PPO-specific hyperparameters.
+        """
         return PPOConfig(**config)
