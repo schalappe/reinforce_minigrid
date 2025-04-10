@@ -7,6 +7,7 @@ from typing import Any, Dict, Tuple
 
 import tensorflow as tf
 import tensorflow_probability as tfp
+from loguru import logger
 from numpy import ndarray
 
 from reinforce.agents.actor_critic.actor_critic_agent import (
@@ -80,6 +81,14 @@ class PPOAgent(ActorCriticAgent):  # Inherit from the new base class
         action_tensor = action_dist.sample()
         action = action_tensor[0].numpy()
 
+        if not (0 <= action < self.action_space):
+            logger.warning(
+                f"Invalid action sampled! Action: {action}, "
+                f"Action Logits: {action_logits.numpy()}, "
+                f"Action Space: {self.action_space}"
+            )
+
+
         # ##: Calculate log probability of the sampled action.
         log_prob = action_dist.log_prob(action_tensor)[0].numpy()
 
@@ -112,7 +121,6 @@ class PPOAgent(ActorCriticAgent):  # Inherit from the new base class
         advantages = experience_batch["advantages"]
         returns = experience_batch["returns"]
         log_probs_old = experience_batch["log_probs_old"]
-        # values_old = experience_batch['values_old'] # May not be needed directly in loss
 
         metrics = self._train_step(observations, actions, advantages, returns, log_probs_old)
 
