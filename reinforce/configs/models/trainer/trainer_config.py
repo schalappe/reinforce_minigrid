@@ -54,6 +54,7 @@ class TrainerConfig(BaseModel):
     )
     save_frequency: int = Field(500, ge=1, description="Number of episodes between saving the model")
     save_dir: Path = Field(Path("outputs") / "models", description="Directory to save models and logs")
+    save_path: Optional[str] = Field(None, description="Path to save the final trained agent model")
 
     # ##: Fields for Optuna integration (optional, added by ExperimentRunner if needed).
     trial_info: Optional[dict] = Field(None, exclude=True)

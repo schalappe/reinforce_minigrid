@@ -153,6 +153,17 @@ class EpisodeTrainer(BaseTrainer):
         )
         self.aim_logger.log_params({"final_total_steps": self.total_steps, "final_episodes": self.episode + 1})
 
+        # ##: Save the final model if a path is specified in the config.
+        if self.config.save_path:
+            try:
+                final_save_path = Path(self.config.save_path)
+                final_save_path.parent.mkdir(parents=True, exist_ok=True)
+                self.agent.save(str(final_save_path))
+                logger.info(f"Final agent model saved successfully to: {final_save_path}")
+            except Exception as e:
+                logger.error(f"Failed to save final agent model to {self.config.save_path}: {e}")
+                logger.exception("Final model saving failed.")
+
         return {
             "episodes": self.episode + 1,
             "total_steps": self.total_steps,
@@ -386,6 +397,9 @@ class EpisodeTrainer(BaseTrainer):
         """
         Log training progress to the console.
 
+        Parameters
+        ----------
+        episode_reward : float
             Reward of the current episode.
         episode_steps : int
             Number of steps in the current episode.
