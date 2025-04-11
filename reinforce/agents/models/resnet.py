@@ -93,7 +93,7 @@ class ResNetA2CModel(Model):
         Returns
         -------
         Tuple[tf.Tensor, tf.Tensor]
-            Tuple of (action_logits, value_estimates).
+            Action logits and value estimates.
         """
         shared_features = self.convolutional_base(inputs, training=training)
         action_logits = self.actor(shared_features, training=training)
@@ -109,10 +109,7 @@ class ResNetA2CModel(Model):
         Dict[str, Any]
             Model configuration dictionary.
         """
-        return {
-            "action_space": self.action_space,
-            "embedding_size": self.embedding_size,
-        }
+        return {"action_space": self.action_space, "embedding_size": self.embedding_size}
 
     @classmethod
     def from_config(cls, config: Dict[str, Any], custom_objects=None) -> ResNetA2CModel:

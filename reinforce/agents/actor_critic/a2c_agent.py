@@ -6,9 +6,10 @@ A2C Agent implementation.
 from typing import Any, Dict, Tuple
 
 import tensorflow as tf
+from keras import Model
 from numpy import ndarray
 
-from reinforce.agents.actor_critic.core import ActorCriticAgent
+from reinforce.agents.actor_critic.ac_agent import ActorCriticAgent
 from reinforce.configs.models import A2CConfig
 from reinforce.utils.preprocessing import preprocess_observation
 
@@ -17,26 +18,26 @@ class A2CAgent(ActorCriticAgent):
     """
     A2C (Advantage Actor-Critic) agent implementation.
 
-    This class implements the Actor-Critic interface for the A2C algorithm.
+    This class implements the Actor-Critic interface for the A2C algorithm. It requires the model
+    to be injected during initialization.
     """
 
-    def __init__(self, action_space: int, hyperparameters: A2CConfig):
+    def __init__(self, model: Model, hyperparameters: A2CConfig):
         """
         Initialize the A2C agent.
 
         Parameters
         ----------
-        action_space : int
-            Number of possible actions. Should match `hyperparameters.action_space`.
+        model : Model
+            The Keras model instance (actor-critic network).
         hyperparameters : A2CConfig
             Pydantic model containing A2C hyperparameters.
         """
-        super().__init__(action_space=action_space, hyperparameters=hyperparameters, agent_name="A2CAgent")
+        super().__init__(model=model, hyperparameters=hyperparameters, agent_name="A2CAgent")
 
-        # ##: The base class init already assigns self.hyperparameters, but we refine the type hint here.
-        self.hyperparameters: A2CConfig = hyperparameters
+        # ##: Refine the type hint for hyperparameters specific to A2C.
+        self._hyperparameters: A2CConfig = hyperparameters
 
-    # ##: act method remains specific to A2C's action selection logic.
     def act(self, observation: ndarray, training: bool = True) -> Tuple[int, Dict[str, Any]]:
         """
         Select an action based on the current observation.
@@ -93,10 +94,8 @@ class A2CAgent(ActorCriticAgent):
         # ##: Data is already preprocessed and in tensor format.
         observations, actions, rewards, next_observations, dones = experience_batch
 
-        # ##: Compute returns and advantages using the input tensors directly.
+        # ##: Compute returns and advantages, and perform one training step.
         returns, advantages = self._compute_returns_and_advantages(rewards, dones, observations, next_observations)
-
-        # ##: Perform one training step.
         metrics = self._train_step(observations, actions, returns, advantages)
 
         return metrics
@@ -129,7 +128,7 @@ class A2CAgent(ActorCriticAgent):
 
         # ##: Reshape values for easier calculations.
         values = tf.squeeze(values)
-        next_values = tf.squeeze(next_values)  # Should be float16 if mixed precision
+        next_values = tf.squeeze(next_values)
 
         # ##: Ensure rewards and dones match the model's compute dtype (e.g., float16)
         compute_dtype = self._model.compute_dtype
@@ -137,12 +136,11 @@ class A2CAgent(ActorCriticAgent):
         dones = tf.cast(dones, compute_dtype)
 
         # ##: Calculate returns using TD(lambda) with lambda=0 (i.e., TD(0)).
-        # ##: Ensure discount factor is also cast if necessary (though usually float32 is fine here)
-        discount_factor = tf.cast(self.hyperparameters.discount_factor, compute_dtype)
+        discount_factor = tf.cast(self._hyperparameters.discount_factor, compute_dtype)
         returns = rewards + discount_factor * next_values * (tf.cast(1.0, compute_dtype) - dones)
 
         # ##: Calculate advantages.
-        advantages = returns - values  # Now returns and values should both be compute_dtype
+        advantages = returns - values
 
         return returns, advantages
 
@@ -154,7 +152,27 @@ class A2CAgent(ActorCriticAgent):
         returns: tf.Tensor,
         advantages: tf.Tensor,
     ) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]:
-        """Calculate policy, value, entropy, and total losses."""
+        """
+        Calculate policy, value, entropy, and total losses.
+
+        Parameters
+        ----------
+        action_logits : tf.Tensor
+            Logits for the actions.
+        values : tf.Tensor
+            Predicted values.
+        actions : tf.Tensor
+            Actions taken.
+        returns : tf.Tensor
+            Calculated returns.
+        advantages : tf.Tensor
+            Calculated advantages.
+
+        Returns
+        -------
+        Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
+            Policy loss, value loss, entropy loss, total loss, and entropy.
+        """
         # ##: Select the action probabilities for the actions that were taken.
         indices = tf.range(tf.shape(actions)[0])
         action_indices = tf.stack([indices, actions], axis=1)
@@ -165,12 +183,12 @@ class A2CAgent(ActorCriticAgent):
         policy_loss = -tf.reduce_mean(selected_action_log_probs * advantages)
 
         # ##: Calculate value loss.
-        value_loss = self.hyperparameters.value_coef * tf.reduce_mean(tf.square(returns - values))
+        value_loss = self._hyperparameters.value_coef * tf.reduce_mean(tf.square(returns - values))
 
         # ##: Calculate entropy loss (for exploration).
         action_probs = tf.nn.softmax(action_logits)
         entropy = -tf.reduce_sum(action_probs * tf.math.log(action_probs + 1e-10), axis=1)
-        entropy_loss = -self.hyperparameters.entropy_coef * tf.reduce_mean(entropy)
+        entropy_loss = -self._hyperparameters.entropy_coef * tf.reduce_mean(entropy)
 
         # ##: Calculate total loss.
         total_loss = policy_loss + value_loss + entropy_loss

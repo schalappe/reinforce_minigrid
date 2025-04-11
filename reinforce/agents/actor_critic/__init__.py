@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Actor-Critic agents and core components.
+Actor-Critic algorithm implementations.
 """
 
-from .algorithms import A2CAgent, PPOAgent
-from .core import ActorCriticAgent, HyperparameterConfig, ResNetA2CModel
+from .a2c_agent import A2CAgent
+from .ppo_agent import PPOAgent
 
-__all__ = ["A2CAgent", "PPOAgent", "ActorCriticAgent", "HyperparameterConfig", "ResNetA2CModel"]
+__all__ = ["A2CAgent", "PPOAgent"]

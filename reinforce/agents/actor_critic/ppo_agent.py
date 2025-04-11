@@ -7,10 +7,10 @@ from typing import Any, Dict, Tuple
 
 import tensorflow as tf
 import tensorflow_probability as tfp
-from loguru import logger
+from keras import Model
 from numpy import ndarray
 
-from reinforce.agents.actor_critic.core import ActorCriticAgent, HyperparameterConfig
+from reinforce.agents.actor_critic.ac_agent import ActorCriticAgent
 from reinforce.configs.models import PPOConfig
 from reinforce.utils.preprocessing import preprocess_observation
 
@@ -19,29 +19,28 @@ class PPOAgent(ActorCriticAgent):
     """
     PPO (Proximal Policy Optimization) agent implementation.
 
-    This class implements the Actor-Critic interface for the PPO algorithm.
-    It uses a clipped surrogate objective and optionally an adaptive KL penalty.
+    This class implements the Actor-Critic interface for the PPO algorithm. It uses a clipped surrogate objective
+    and optionally an adaptive KL penalty. Requires the model to be injected during initialization.
     """
 
-    def __init__(self, action_space: int, hyperparameters: PPOConfig):
+    def __init__(self, model: Model, hyperparameters: PPOConfig):
         """
         Initialize the PPO agent.
 
         Parameters
         ----------
-        action_space : int
-            Number of possible actions.
+        model : Model
+            The Keras model instance (actor-critic network).
         hyperparameters : PPOConfig
             Pydantic model containing hyperparameters for PPO.
         """
-        # ##: Call the base class initializer.
-        super().__init__(action_space=action_space, hyperparameters=hyperparameters, agent_name="PPOAgent")
+        super().__init__(model=model, hyperparameters=hyperparameters, agent_name="PPOAgent")
 
-        # ##: Ensure type hint reflects the specific config for this agent.
-        self.hyperparameters: PPOConfig = hyperparameters
+        # ##: Refine the type hint for hyperparameters specific to PPO.
+        self._hyperparameters: PPOConfig = hyperparameters
 
-        # ##: PPO specific: Adaptive KL penalty coefficient (if used).
-        self.kl_coeff = tf.Variable(self.hyperparameters.initial_kl_coeff, trainable=False, dtype=tf.float32)
+        # ##: PPO specific: Adaptive KL penalty coefficient.
+        self._kl_coefficient = tf.Variable(self._hyperparameters.initial_kl_coeff, trainable=False, dtype=tf.float32)
 
     def act(self, observation: ndarray, training: bool = True) -> Tuple[int, Dict[str, Any]]:
         """
@@ -70,20 +69,13 @@ class PPOAgent(ActorCriticAgent):
             observation = tf.expand_dims(observation, axis=0)
 
         # ##: Get policy logits and value from the model.
-        action_logits, value = self._model(observation, training=training)  # Pass training flag
+        action_logits, value = self._model(observation, training=training)
         action_probs = tf.nn.softmax(action_logits)
 
         # ##: Sample action from the distribution.
         action_dist = tfp.distributions.Categorical(logits=action_logits)
         action_tensor = action_dist.sample()
         action = action_tensor[0].numpy()
-
-        if not (0 <= action < self.action_space):
-            logger.warning(
-                f"Invalid action sampled! Action: {action}, "
-                f"Action Logits: {action_logits.numpy()}, "
-                f"Action Space: {self.action_space}"
-            )
 
         # ##: Calculate log probability of the sampled action.
         log_prob = action_dist.log_prob(action_tensor)[0].numpy()
@@ -121,13 +113,15 @@ class PPOAgent(ActorCriticAgent):
         metrics = self._train_step(observations, actions, advantages, returns, log_probs_old)
 
         # ##: Adjust KL coefficient if adaptive KL penalty is enabled.
-        if self.hyperparameters.use_adaptive_kl:
-            kl_div = metrics.get("kl_divergence", 0.0)
-            if kl_div > 1.5 * self.hyperparameters.target_kl:
-                self.kl_coeff.assign(self.kl_coeff.read_value() * 2.0)
-            elif kl_div < self.hyperparameters.target_kl / 1.5:
-                self.kl_coeff.assign(self.kl_coeff.read_value() / 2.0)
-            metrics["kl_coeff"] = self.kl_coeff.read_value().numpy()
+        if self._hyperparameters.use_adaptive_kl:
+            kl_div = metrics.get("kl_divergence", tf.constant(0.0, dtype=tf.float32))
+            target_kl = tf.cast(self._hyperparameters.target_kl, dtype=tf.float32)
+
+            if tf.greater(kl_div, 1.5 * target_kl):
+                self._kl_coefficient.assign(self._kl_coefficient.read_value() * 2.0)
+            elif tf.less(kl_div, target_kl / 1.5):
+                self._kl_coefficient.assign(self._kl_coefficient.read_value() / 2.0)
+            metrics["kl_coeff"] = self._kl_coefficient.read_value()
 
         return metrics
 
@@ -175,36 +169,33 @@ class PPOAgent(ActorCriticAgent):
             ratio = tf.exp(log_probs_new - log_probs_old)
 
             # ##: Calculate the clipped surrogate objective.
-            clip_range = self.hyperparameters.clip_range
+            clip_range = self._hyperparameters.clip_range
             clipped_ratio = tf.clip_by_value(ratio, 1.0 - clip_range, 1.0 + clip_range)
             policy_loss_unclipped = ratio * advantages
             policy_loss_clipped = clipped_ratio * advantages
             policy_loss = -tf.reduce_mean(tf.minimum(policy_loss_unclipped, policy_loss_clipped))
 
-            # ##: Calculate value loss (clipped value loss optional, standard MSE here).
+            # ##: Calculate value loss end entropy bonus.
             value_loss = 0.5 * tf.reduce_mean(tf.square(returns - values))
+            entropy_loss = -self._hyperparameters.entropy_coef * entropy
 
-            # ##: Calculate entropy bonus (negative for gradient ascent).
-            entropy_loss = -self.hyperparameters.entropy_coef * entropy
-
-            # ##: Calculate KL divergence (for adaptive penalty or logging).
-            # ##: Ensure log_probs_old is detached if it came from tape context previously.
+            # ##: Calculate KL divergence between old and new policy.
             kl_divergence = tf.reduce_mean(log_probs_old - log_probs_new)
 
             # ##: Calculate total loss.
-            total_loss = policy_loss + self.hyperparameters.value_coef * value_loss + entropy_loss
+            total_loss = policy_loss + self._hyperparameters.value_coef * value_loss + entropy_loss
 
             # ##: Add adaptive KL penalty if enabled.
-            if self.hyperparameters.use_adaptive_kl:
-                kl_penalty = self.kl_coeff.read_value() * tf.maximum(
-                    0.0, kl_divergence - self.hyperparameters.target_kl
+            if self._hyperparameters.use_adaptive_kl:
+                kl_penalty = self._kl_coefficient.read_value() * tf.maximum(
+                    0.0, kl_divergence - self._hyperparameters.target_kl
                 )
                 total_loss += kl_penalty
 
         # ##: Calculate gradients and apply them.
         gradients = tape.gradient(total_loss, self._model.trainable_variables)
-        if self.hyperparameters.max_grad_norm is not None:
-            gradients, _ = tf.clip_by_global_norm(gradients, self.hyperparameters.max_grad_norm)
+        if self._hyperparameters.max_grad_norm is not None:
+            gradients, _ = tf.clip_by_global_norm(gradients, self._hyperparameters.max_grad_norm)
         self._optimizer.apply_gradients(zip(gradients, self._model.trainable_variables))
 
         return {
@@ -223,8 +214,8 @@ class PPOAgent(ActorCriticAgent):
         """
         Load the PPO agent from the specified path.
 
-        Overrides the base load method to provide the specific config class,
-        custom objects for model loading, and reinitialize PPO-specific state.
+        Overrides the base load method to reinitialize PPO-specific state after the base class handles
+        loading the model and hyperparameters.
 
         Parameters
         ----------
@@ -232,20 +223,20 @@ class PPOAgent(ActorCriticAgent):
             Directory path to load the agent from.
         """
         super().load(path)
-        self.kl_coeff = tf.Variable(self.hyperparameters.initial_kl_coeff, trainable=False, dtype=tf.float32)
+        self._kl_coefficient = tf.Variable(self._hyperparameters.initial_kl_coeff, trainable=False, dtype=tf.float32)
 
-    def _load_specific_hyperparameters(self, config: Dict[str, Any]) -> HyperparameterConfig:
+    def _load_specific_hyperparameters(self, config: Dict[str, Any]) -> PPOConfig:
         """
         Load PPO-specific hyperparameters from the configuration dictionary.
 
         Parameters
         ----------
-        config: Dict[str, Any]
-            Dictionary containing the configuration parameters.
+        config : Dict[str, Any]
+            Dictionary containing the configuration parameters loaded from file.
 
         Returns
         -------
-        HyperparameterConfig
-            PPO-specific hyperparameters.
+        PPOConfig
+            PPO-specific Pydantic config model instance.
         """
         return PPOConfig(**config)
