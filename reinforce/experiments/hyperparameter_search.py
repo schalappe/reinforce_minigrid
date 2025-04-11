@@ -7,7 +7,6 @@ It supports parallel execution, pruning of underperforming trials, and visualiza
 """
 
 import json
-from argparse import ArgumentParser
 from pathlib import Path
 from traceback import format_exc
 from typing import Any, Dict, Optional, Union
@@ -502,26 +501,3 @@ class HyperparameterSearch:
             current[components[-1]] = value
 
         return experiment_config
-
-
-def main():
-    """
-    Entry point for running hyperparameter search from the command line.
-
-    Parses arguments, initializes the HyperparameterSearch class, and runs the search.
-    """
-    # ##: Parse command line arguments.
-    parser = ArgumentParser(description="Run a hyperparameter search for reinforcement learning experiments")
-    parser.add_argument("config", help="Path to the search configuration file")
-    parser.add_argument("--trials", type=int, default=20, help="Number of trials to run")
-    args = parser.parse_args()
-
-    # ##: Create hyperparameter search.
-    search = HyperparameterSearch()
-
-    # ##: Run the search.
-    search.run_search(args.config, n_trials=args.trials)
-
-
-if __name__ == "__main__":
-    main()

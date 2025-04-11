@@ -8,7 +8,6 @@ training, and logging (via AIM).
 """
 
 import sys
-from argparse import ArgumentParser
 from time import time
 from traceback import format_exc
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -251,43 +250,3 @@ class ExperimentRunner:
                 aim_logger.log_text(f"Experiment failed: {exc}\n{format_exc()}", name="error_log")
                 aim_logger.close()
             sys.exit(1)
-
-
-def main():
-    """
-    Run an experiment from the command line.
-
-    Usage:
-        python experiment_runner.py <config_path> [--config-dir <dir>] [--run-name <name>] [--tags <tag1> <tag2> ...]
-
-    Example:
-        python experiment_runner.py examples/configs/a2c_maze.yaml --tags baseline test
-    """
-    # ##: Parse command line arguments.
-    parser = ArgumentParser(description="Run a reinforcement learning experiment")
-    parser.add_argument(
-        "config", help="Path to the experiment configuration file (e.g., examples/configs/a2c_maze.yaml)"
-    )
-    parser.add_argument("--config-dir", help="Directory containing base configuration files")
-    parser.add_argument("--run-name", help="Custom name for the AIM run")
-    parser.add_argument("--tags", nargs="+", help="Additional tags for the AIM run (e.g., --tags baseline test)")
-    args = parser.parse_args()
-
-    # ##: Create experiment runner.
-    runner = ExperimentRunner()
-
-    # ##: Run the experiment with optional AIM args.
-    results = runner.run_experiment(
-        experiment_config=ConfigManager.load_experiment_config(args.config), aim_tags=args.tags
-    )
-
-    # ##: Print summary of results.
-    logger.info("Experiment complete!")
-    logger.info(f"Episodes: {results.get('episodes', 0)}")
-    logger.info(f"Total steps: {results.get('total_steps', 0)}")
-    logger.info(f"Mean reward: {results.get('mean_reward', 0):.2f}")
-    logger.info(f"Max reward: {results.get('max_reward', 0):.2f}")
-
-
-if __name__ == "__main__":
-    main()
