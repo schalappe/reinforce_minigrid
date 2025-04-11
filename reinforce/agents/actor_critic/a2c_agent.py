@@ -36,7 +36,7 @@ class A2CAgent(ActorCriticAgent):
         super().__init__(model=model, hyperparameters=hyperparameters, agent_name="A2CAgent")
 
         # ##: Refine the type hint for hyperparameters specific to A2C.
-        self._hyperparameters: A2CConfig = hyperparameters
+        self.hyperparameters: A2CConfig = hyperparameters
 
     def act(self, observation: ndarray, training: bool = True) -> Tuple[int, Dict[str, Any]]:
         """
@@ -136,7 +136,7 @@ class A2CAgent(ActorCriticAgent):
         dones = tf.cast(dones, compute_dtype)
 
         # ##: Calculate returns using TD(lambda) with lambda=0 (i.e., TD(0)).
-        discount_factor = tf.cast(self._hyperparameters.discount_factor, compute_dtype)
+        discount_factor = tf.cast(self.hyperparameters.discount_factor, compute_dtype)
         returns = rewards + discount_factor * next_values * (tf.cast(1.0, compute_dtype) - dones)
 
         # ##: Calculate advantages.
@@ -183,12 +183,12 @@ class A2CAgent(ActorCriticAgent):
         policy_loss = -tf.reduce_mean(selected_action_log_probs * advantages)
 
         # ##: Calculate value loss.
-        value_loss = self._hyperparameters.value_coef * tf.reduce_mean(tf.square(returns - values))
+        value_loss = self.hyperparameters.value_coef * tf.reduce_mean(tf.square(returns - values))
 
         # ##: Calculate entropy loss (for exploration).
         action_probs = tf.nn.softmax(action_logits)
         entropy = -tf.reduce_sum(action_probs * tf.math.log(action_probs + 1e-10), axis=1)
-        entropy_loss = -self._hyperparameters.entropy_coef * tf.reduce_mean(entropy)
+        entropy_loss = -self.hyperparameters.entropy_coef * tf.reduce_mean(entropy)
 
         # ##: Calculate total loss.
         total_loss = policy_loss + value_loss + entropy_loss

@@ -49,14 +49,14 @@ class ActorCriticAgent(BaseAgent):
             If None, defaults to `KerasFilePersistence`, by default None.
         """
         self._name = agent_name
-        self._hyperparameters = hyperparameters
+        self.hyperparameters = hyperparameters
 
         # ##: Inject model and persistence handler
         self._model = model
         self._persistence_handler = persistence_handler or KerasFilePersistence()
 
         # ##: Common optimizer setup.
-        self._optimizer = optimizers.Adam(learning_rate=self._hyperparameters.learning_rate)
+        self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters.learning_rate)
 
     def save(self, path: str) -> None:
         """
@@ -67,7 +67,7 @@ class ActorCriticAgent(BaseAgent):
         path : str
             Directory path to save the agent's state.
         """
-        hyperparams = self._hyperparameters.model_dump()
+        hyperparams = self.hyperparameters.model_dump()
         self._persistence_handler.save(path=path, agent_name=self.name, model=self._model, hyperparameters=hyperparams)
 
     def load(self, path: str) -> None:
@@ -85,10 +85,10 @@ class ActorCriticAgent(BaseAgent):
         self._model = loaded_model
 
         # ##: Parse the loaded hyperparameter dict into the specific Pydantic model.
-        self._hyperparameters = self._load_specific_hyperparameters(loaded_hyperparams_dict)
+        self.hyperparameters = self._load_specific_hyperparameters(loaded_hyperparams_dict)
 
         # ##: Re-initialize action space and optimizer based on loaded hyperparameters.
-        self._optimizer = optimizers.Adam(learning_rate=self._hyperparameters.learning_rate)
+        self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters.learning_rate)
 
     @property
     def name(self) -> str:
