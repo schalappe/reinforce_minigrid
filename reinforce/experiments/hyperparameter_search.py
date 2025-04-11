@@ -21,8 +21,7 @@ from optuna.trial import Trial, TrialState
 from reinforce.configs import ConfigManager
 from reinforce.configs.models import ExperimentConfig
 from reinforce.experiments.experiment_runner import ExperimentRunner
-from reinforce.utils import AimLogger
-from reinforce.utils.logging_setup import setup_logger
+from reinforce.utils.logger import AimLogger, setup_logger
 
 setup_logger()
 

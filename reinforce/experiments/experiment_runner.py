@@ -27,8 +27,7 @@ from reinforce.configs.models import (
 from reinforce.environments import BaseEnvironment
 from reinforce.environments.minigrid import MazeEnvironment
 from reinforce.trainers import BaseTrainer, EpisodeTrainer, PPOTrainer
-from reinforce.utils import AimLogger
-from reinforce.utils.logging_setup import setup_logger
+from reinforce.utils.logger import AimLogger, setup_logger
 
 setup_logger()
 
