@@ -10,6 +10,7 @@ from typing import Any, Dict, Tuple
 from keras import Model, models
 
 from reinforce.agents.persistence.base_persistence import AgentPersistence
+from reinforce.configs import ConfigManager
 
 
 class KerasFilePersistence(AgentPersistence):
@@ -41,8 +42,7 @@ class KerasFilePersistence(AgentPersistence):
 
         # ##: Save the hyperparameters to JSON.
         hyperparams_path = save_directory / "hyperparams.json"
-        with open(hyperparams_path, "w", encoding="utf-8") as file:
-            file.write(json.dumps(hyperparameters, indent=4))
+        ConfigManager.save_config(hyperparameters, str(hyperparams_path))
 
     def load(self, path: str, agent_name: str) -> Tuple[Model, Dict[str, Any]]:
         """
@@ -77,8 +77,6 @@ class KerasFilePersistence(AgentPersistence):
         hyperparams_path = load_directory / "hyperparams.json"
         if not hyperparams_path.exists():
             raise FileNotFoundError(f"Hyperparameters file not found at {hyperparams_path}")
-
-        with open(hyperparams_path, "r", encoding="utf-8") as f:
-            loaded_hyperparams_dict = json.load(f)
+        loaded_hyperparams_dict = ConfigManager.load_config(str(hyperparams_path))
 
         return loaded_model, loaded_hyperparams_dict

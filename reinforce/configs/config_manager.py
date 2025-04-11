@@ -5,7 +5,7 @@ Configuration management for the reinforcement learning framework.
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any, Callable, Dict, Union
 
 import yaml
 from pydantic import BaseModel, ValidationError
@@ -20,6 +20,62 @@ class ConfigManager:
     This class provides functionality for loading, validating, and managing configurations
     for agents, environments, trainers, and experiments.
     """
+
+    @staticmethod
+    def _get_reader(file_ext: str) -> Callable:
+        """
+        Get the appropriate function to read a config file based on extension.
+
+        Parameters
+        ----------
+        file_ext : str
+            The file extension of the config file.
+
+        Returns
+        -------
+        Callable
+            The function to read the config file.
+
+        Raises
+        ------
+        ValueError
+            If the file extension is not supported.
+        """
+        if file_ext in (".yaml", ".yml"):
+            return yaml.safe_load
+
+        if file_ext == ".json":
+            return json.load
+
+        raise ValueError(f"Unsupported file format for reading: {file_ext}")
+
+    @staticmethod
+    def _get_writer(file_ext: str) -> Callable:
+        """
+        Get the appropriate function to write a config file based on extension.
+
+        Parameters
+        ----------
+        file_ext : str
+            The file extension of the config file.
+
+        Returns
+        -------
+        Callable
+            The function to write the config file.
+
+        Raises
+        ------
+        ValueError
+            If the file extension is not supported.
+        """
+        if file_ext in (".yaml", ".yml"):
+            return lambda data, file: yaml.dump(data, file, default_flow_style=False, sort_keys=False)
+
+        if file_ext == ".json":
+            return lambda data, file: json.dump(data, file, indent=2)
+
+        raise ValueError(f"Unsupported file format for writing: {file_ext}")
 
     @staticmethod
     def load_config(path: str) -> Dict[str, Any]:
@@ -48,17 +104,13 @@ class ConfigManager:
             raise FileNotFoundError(f"Configuration file not found: {path}")
 
         file_ext = path_obj.suffix.lower()
-
-        if file_ext in (".yaml", ".yml"):
+        try:
+            reader = ConfigManager._get_reader(file_ext)
             with path_obj.open("r", encoding="utf-8") as file:
-                config = yaml.safe_load(file)
-        elif file_ext == ".json":
-            with path_obj.open("r", encoding="utf-8") as file:
-                config = json.load(file)
-        else:
-            raise ValueError(f"Unsupported file format: {file_ext}")
-
-        return config
+                config = reader(file)
+            return config
+        except ValueError as exc:
+            raise ValueError(f"Unsupported file format: {file_ext}") from exc
 
     @staticmethod
     def save_config(config: Union[BaseModel, Dict[str, Any]], path: str) -> None:
@@ -86,14 +138,12 @@ class ConfigManager:
         # ##: Dump Pydantic model to dict before saving.
         config_dict = config.model_dump(mode="json") if isinstance(config, BaseModel) else config
 
-        if file_ext in (".yaml", ".yml"):
+        try:
+            writer = ConfigManager._get_writer(file_ext)
             with path_obj.open("w", encoding="utf-8") as file:
-                yaml.dump(config_dict, file, default_flow_style=False, sort_keys=False)
-        elif file_ext == ".json":
-            with path_obj.open("w", encoding="utf-8") as file:
-                json.dump(config_dict, file, indent=2)
-        else:
-            raise ValueError(f"Unsupported file format: {file_ext}")
+                writer(config_dict, file)
+        except ValueError as exc:
+            raise ValueError(f"Unsupported file format: {file_ext}") from exc
 
     @classmethod
     def load_experiment_config(cls, path: str) -> ExperimentConfig:
@@ -121,7 +171,6 @@ class ConfigManager:
 
         try:
             # ##: Parse and validate the raw dictionary using the Pydantic model.
-            experiment_config = ExperimentConfig(**raw_config)
-            return experiment_config
+            return ExperimentConfig(**raw_config)
         except ValidationError as exc:
             raise ValueError(f"Configuration validation failed: {exc}") from exc
