@@ -14,10 +14,10 @@ import numpy as np
 import tensorflow as tf
 from loguru import logger
 
-from reinforce.agents import PPOAgent
+from reinforce.agents.actor_critic import PPOAgent
 from reinforce.configs.models import PPOTrainerConfig
-from reinforce.environments.base_environment import BaseEnvironment
-from reinforce.trainers.base_trainer import BaseTrainer
+from reinforce.environments import BaseEnvironment
+from reinforce.trainers import BaseTrainer
 from reinforce.utils.aim_logger import AimLogger
 from reinforce.utils.buffers.rollout_buffer import RolloutBuffer
 from reinforce.utils.logging_setup import setup_logger

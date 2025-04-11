@@ -15,7 +15,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from loguru import logger
 
-from reinforce.agents import A2CAgent, PPOAgent
+from reinforce.agents import BaseAgent
+from reinforce.agents.actor_critic import A2CAgent, PPOAgent
 from reinforce.configs import ConfigManager
 from reinforce.configs.models import (
     AgentConfigUnion,
@@ -23,9 +24,9 @@ from reinforce.configs.models import (
     ExperimentConfig,
     TrainerConfigUnion,
 )
-from reinforce.core import BaseAgent, BaseEnvironment, BaseTrainer
-from reinforce.environments import MazeEnvironment
-from reinforce.trainers import EpisodeTrainer, PPOTrainer
+from reinforce.environments import BaseEnvironment
+from reinforce.environments.minigrid import MazeEnvironment
+from reinforce.trainers import BaseTrainer, EpisodeTrainer, PPOTrainer
 from reinforce.utils import AimLogger
 from reinforce.utils.logging_setup import setup_logger
 
