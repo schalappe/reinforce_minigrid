@@ -3,14 +3,14 @@
 Concrete persistence handler using Keras model saving and JSON for hyperparameters.
 """
 
-import json
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
 from keras import Model, models
 
 from reinforce.agents.persistence.base_persistence import AgentPersistence
-from reinforce.configs import ConfigManager
+from reinforce.configs.manager.reader import JsonReader
+from reinforce.configs.manager.writer import JsonWriter
 
 
 class KerasFilePersistence(AgentPersistence):
@@ -42,7 +42,7 @@ class KerasFilePersistence(AgentPersistence):
 
         # ##: Save the hyperparameters to JSON.
         hyperparams_path = save_directory / "hyperparams.json"
-        ConfigManager.save_config(hyperparameters, str(hyperparams_path))
+        JsonWriter().write(hyperparameters, hyperparams_path)
 
     def load(self, path: str, agent_name: str) -> Tuple[Model, Dict[str, Any]]:
         """
@@ -77,6 +77,6 @@ class KerasFilePersistence(AgentPersistence):
         hyperparams_path = load_directory / "hyperparams.json"
         if not hyperparams_path.exists():
             raise FileNotFoundError(f"Hyperparameters file not found at {hyperparams_path}")
-        loaded_hyperparams_dict = ConfigManager.load_config(str(hyperparams_path))
+        loaded_hyperparams_dict = JsonReader().read(hyperparams_path)
 
         return loaded_model, loaded_hyperparams_dict

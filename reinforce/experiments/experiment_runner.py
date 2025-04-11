@@ -15,9 +15,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from loguru import logger
 
-from reinforce.agents import BaseAgent
 from reinforce.agents.actor_critic import A2CAgent, PPOAgent
-from reinforce.configs import ConfigManager
+from reinforce.agents.models import ResNetACModel
 from reinforce.configs.models import (
     AgentConfigUnion,
     EnvironmentConfig,
@@ -39,6 +38,102 @@ class ExperimentRunner:
     This class sets up and runs reinforcement learning experiments based on configuration files.
     It supports logging via AIM, Optuna pruning, and saving experiment results.
     """
+
+    @staticmethod
+    def _create_environment(env_config: EnvironmentConfig) -> MazeEnvironment:
+        """
+        Create an environment based on the Pydantic configuration model.
+
+        This method creates and returns a `MazeEnvironment` instance based on the provided config model.
+
+        Parameters
+        ----------
+        env_config : Dict[str, Any]
+            Environment configuration.
+
+        Returns
+        -------
+        MazeEnvironment
+            Created environment instance.
+
+        Notes
+        -----
+        Currently only supports `MazeEnvironment`. Needs update if more env types are added.
+        """
+        if env_config.env_type == "MazeEnvironment":
+            return MazeEnvironment(use_image_obs=env_config.use_image_obs)
+        raise ValueError(f"Unsupported environment type: {env_config.env_type}")
+
+    @staticmethod
+    def _create_agent(agent_config: AgentConfigUnion, env_action_space_size: int) -> Union[A2CAgent, PPOAgent]:
+        """
+        Create an agent based on the Pydantic configuration model.
+
+        This method creates and returns an agent instance based on the provided config model.
+        It uses the `agent_type` field to determine which agent class to instantiate.
+
+        Parameters
+        ----------
+        agent_config : AgentConfigUnion
+            Pydantic agent configuration model (e.g., A2CConfig).
+
+        Returns
+        -------
+        Union[A2CAgent, PPOAgent]
+            Created agent instance.
+
+        Raises
+        ------
+        ValueError
+            If the agent type specified in the config is not supported.
+        """
+        if agent_config.agent_type == "A2C":
+            return A2CAgent(model=ResNetACModel(action_space=env_action_space_size), hyperparameters=agent_config)
+        if agent_config.agent_type == "PPO":
+            return PPOAgent(model=ResNetACModel(action_space=env_action_space_size), hyperparameters=agent_config)
+
+        raise ValueError(f"Unsupported agent type: {agent_config.agent_type}")
+
+    @staticmethod
+    def _create_trainer(
+        trainer_config: TrainerConfigUnion,
+        agent: Union[A2CAgent, PPOAgent],
+        environment: BaseEnvironment,
+        aim_logger: Optional[AimLogger] = None,
+    ) -> BaseTrainer:
+        """
+        Create a trainer based on the Pydantic configuration model.
+
+        This method creates and returns a trainer instance based on the provided config model.
+        It uses the `trainer_type` field to determine which trainer class to instantiate.
+
+        Parameters
+        ----------
+        trainer_config : TrainerConfigUnion
+            Pydantic trainer configuration model (e.g., EpisodeTrainerConfig).
+        agent : A2CAgent | PPOAgent
+            The agent instance to be trained.
+        environment : BaseEnvironment
+            The environment instance to train in.
+        aim_logger : AimLogger, optional
+            AIM logger instance for experiment tracking.
+
+        Returns
+        -------
+        BaseTrainer
+            Created trainer instance.
+
+        Raises
+        ------
+        ValueError
+            If the trainer type specified in the config is not supported.
+        """
+        if trainer_config.trainer_type == "EpisodeTrainer":
+            return EpisodeTrainer(agent=agent, environment=environment, config=trainer_config, aim_logger=aim_logger)
+        if trainer_config.trainer_type == "PPOTrainer":
+            return PPOTrainer(agent=agent, environment=environment, config=trainer_config, aim_logger=aim_logger)
+
+        raise ValueError(f"Unsupported trainer type: {trainer_config.trainer_type}")
 
     def _setup_experiment(
         self,
@@ -156,102 +251,6 @@ class ExperimentRunner:
                 aim_logger.log_text(f"Experiment failed: {exc}\n{format_exc()}", name="error_log")
                 aim_logger.close()
             sys.exit(1)
-
-    @staticmethod
-    def _create_environment(env_config: EnvironmentConfig) -> MazeEnvironment:
-        """
-        Create an environment based on the Pydantic configuration model.
-
-        This method creates and returns a `MazeEnvironment` instance based on the provided config model.
-
-        Parameters
-        ----------
-        env_config : Dict[str, Any]
-            Environment configuration.
-
-        Returns
-        -------
-        MazeEnvironment
-            Created environment instance.
-
-        Notes
-        -----
-        Currently only supports `MazeEnvironment`. Needs update if more env types are added.
-        """
-        if env_config.env_type == "MazeEnvironment":
-            return MazeEnvironment(use_image_obs=env_config.use_image_obs)
-        raise ValueError(f"Unsupported environment type: {env_config.env_type}")
-
-    @staticmethod
-    def _create_agent(agent_config: AgentConfigUnion, env_action_space_size: int) -> BaseAgent:
-        """
-        Create an agent based on the Pydantic configuration model.
-
-        This method creates and returns an agent instance based on the provided config model.
-        It uses the `agent_type` field to determine which agent class to instantiate.
-
-        Parameters
-        ----------
-        agent_config : AgentConfigUnion
-            Pydantic agent configuration model (e.g., A2CConfig).
-
-        Returns
-        -------
-        BaseAgent
-            Created agent instance.
-
-        Raises
-        ------
-        ValueError
-            If the agent type specified in the config is not supported.
-        """
-        if agent_config.agent_type == "A2C":
-            return A2CAgent(action_space=env_action_space_size, hyperparameters=agent_config)
-        if agent_config.agent_type == "PPO":
-            return PPOAgent(action_space=env_action_space_size, hyperparameters=agent_config)
-
-        raise ValueError(f"Unsupported agent type: {agent_config.agent_type}")
-
-    @staticmethod
-    def _create_trainer(
-        trainer_config: TrainerConfigUnion,
-        agent: Union[A2CAgent, PPOAgent],
-        environment: BaseEnvironment,
-        aim_logger: Optional[AimLogger] = None,
-    ) -> BaseTrainer:
-        """
-        Create a trainer based on the Pydantic configuration model.
-
-        This method creates and returns a trainer instance based on the provided config model.
-        It uses the `trainer_type` field to determine which trainer class to instantiate.
-
-        Parameters
-        ----------
-        trainer_config : TrainerConfigUnion
-            Pydantic trainer configuration model (e.g., EpisodeTrainerConfig).
-        agent : A2CAgent | PPOAgent
-            The agent instance to be trained.
-        environment : BaseEnvironment
-            The environment instance to train in.
-        aim_logger : AimLogger, optional
-            AIM logger instance for experiment tracking.
-
-        Returns
-        -------
-        BaseTrainer
-            Created trainer instance.
-
-        Raises
-        ------
-        ValueError
-            If the trainer type specified in the config is not supported.
-        """
-        if trainer_config.trainer_type == "EpisodeTrainer":
-            return EpisodeTrainer(agent=agent, environment=environment, config=trainer_config, aim_logger=aim_logger)
-        if trainer_config.trainer_type == "PPOTrainer":
-            return PPOTrainer(agent=agent, environment=environment, config=trainer_config, aim_logger=aim_logger)
-
-        raise ValueError(f"Unsupported trainer type: {trainer_config.trainer_type}")
 
 
 def main():

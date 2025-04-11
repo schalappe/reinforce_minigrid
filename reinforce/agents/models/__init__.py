@@ -3,6 +3,6 @@
 Models for all actors and critics algorithms.
 """
 
-from .resnet import ResNetA2CModel
+from .resnet import ResNetACModel
 
-__all__ = ["ResNetA2CModel"]
+__all__ = ["ResNetACModel"]

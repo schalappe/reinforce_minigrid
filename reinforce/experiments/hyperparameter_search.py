@@ -18,7 +18,7 @@ from optuna.exceptions import TrialPruned
 from optuna.pruners import MedianPruner
 from optuna.trial import Trial, TrialState
 
-from reinforce.configs import ConfigManager
+from reinforce.configs.manager.reader import YamlReader
 from reinforce.configs.models import ExperimentConfig
 from reinforce.experiments.experiment_runner import ExperimentRunner
 from reinforce.utils.logger import AimLogger, setup_logger
@@ -34,7 +34,6 @@ class HyperparameterSearch:
     with support for parallel execution, pruning, and visualization.
     """
 
-    config_manager = ConfigManager()
     experiment_runner = ExperimentRunner()
     results_dir = Path("outputs/hyperparameter_search")
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -93,7 +92,7 @@ class HyperparameterSearch:
             If the search or base configuration file is not found.
         """
         try:
-            self.search_config = self.config_manager.load_config(str(search_config_path))
+            self.search_config = YamlReader().read(Path(search_config_path))
             self.base_config = self.search_config.get("base_config", {})
 
             if self.search_config:

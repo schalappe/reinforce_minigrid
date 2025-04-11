@@ -29,7 +29,7 @@ def residual_block(x: tf.Tensor, filters: int, kernel_size: int = 3, strides: in
     return out
 
 
-class ResNetA2CModel(Model):
+class ResNetACModel(Model):
     """
     Actor-Critic model using residual blocks in the convolutional base.
     """
@@ -112,7 +112,7 @@ class ResNetA2CModel(Model):
         return {"action_space": self.action_space, "embedding_size": self.embedding_size}
 
     @classmethod
-    def from_config(cls, config: Dict[str, Any], custom_objects=None) -> ResNetA2CModel:
+    def from_config(cls, config: Dict[str, Any], custom_objects=None) -> ResNetACModel:
         """
         Create a model from a configuration dictionary.
 
@@ -125,7 +125,7 @@ class ResNetA2CModel(Model):
 
         Returns
         -------
-        ResNetA2CModel
+        ResNetACModel
             Instantiated model.
         """
         return cls(**config)
