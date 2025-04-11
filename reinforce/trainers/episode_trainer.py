@@ -15,10 +15,10 @@ import tensorflow as tf
 from aim import Distribution
 from loguru import logger
 
+from reinforce.agents.base_agent import BaseAgent
 from reinforce.configs.models import EpisodeTrainerConfig
-from reinforce.core.base_agent import BaseAgent
-from reinforce.core.base_environment import BaseEnvironment
-from reinforce.core.base_trainer import BaseTrainer
+from reinforce.environments.base_environment import BaseEnvironment
+from reinforce.trainers.base_trainer import BaseTrainer
 from reinforce.utils.aim_logger import AimLogger
 from reinforce.utils.logging_setup import setup_logger
 from reinforce.utils.preprocessing import preprocess_observation

@@ -12,8 +12,8 @@ from keras import models, optimizers
 from numpy import ndarray
 
 from reinforce.agents.actor_critic.core.model import ResNetA2CModel
+from reinforce.agents.base_agent import BaseAgent
 from reinforce.configs.models import A2CConfig, PPOConfig
-from reinforce.core.base_agent import BaseAgent
 
 HyperparameterConfig = Union[A2CConfig, PPOConfig]
 

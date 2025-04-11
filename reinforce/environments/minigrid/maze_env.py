@@ -10,7 +10,7 @@ from minigrid.wrappers import RGBImgObsWrapper
 from numpy import float32, ndarray
 
 from maze.envs import Maze
-from reinforce.core.base_environment import BaseEnvironment
+from reinforce.environments.base_environment import BaseEnvironment
 
 
 class MazeEnvironment(BaseEnvironment):
