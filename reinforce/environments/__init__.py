@@ -3,7 +3,6 @@
 Environment wrappers for reinforcement learning.
 """
 
-from reinforce.environments.base_environment import BaseEnvironment
-from reinforce.environments.minigrid import MazeEnvironment
+from .base_environment import BaseEnvironment
 
-__all__ = ["MazeEnvironment", "BaseEnvironment"]
+__all__ = ["BaseEnvironment"]

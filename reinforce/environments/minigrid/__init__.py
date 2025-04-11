@@ -3,8 +3,6 @@
 MiniGrid environment wrappers.
 """
 
-from reinforce.environments.minigrid.maze_env import MazeEnvironment
+from .maze_env import MazeEnvironment
 
-__all__ = [
-    "MazeEnvironment",
-]
+__all__ = ["MazeEnvironment"]
