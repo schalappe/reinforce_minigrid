@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Environment wrappers for reinforcement learning.
+Environment wrappers and factory for reinforcement learning.
 """
 
 from .base_environment import BaseEnvironment
+from .factory import EnvironmentFactory
 
-__all__ = ["BaseEnvironment"]
+__all__ = ["BaseEnvironment", "EnvironmentFactory"]

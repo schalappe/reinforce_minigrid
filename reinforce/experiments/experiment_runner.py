@@ -10,21 +10,15 @@ training, and logging (via AIM).
 import sys
 from time import time
 from traceback import format_exc
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from loguru import logger
 
-from reinforce.agents.actor_critic import A2CAgent, PPOAgent
-from reinforce.agents.models import ResNetACModel
-from reinforce.configs.models import (
-    AgentConfigUnion,
-    EnvironmentConfig,
-    ExperimentConfig,
-    TrainerConfigUnion,
-)
-from reinforce.environments import BaseEnvironment
-from reinforce.environments.minigrid import MazeEnvironment
-from reinforce.learning.trainers import A2CTrainer, BaseTrainer, PPOTrainer
+from reinforce.agents.factory import AgentFactory
+from reinforce.configs.models import ExperimentConfig
+from reinforce.environments.factory import EnvironmentFactory
+from reinforce.learning.trainers import BaseTrainer
+from reinforce.learning.trainers.factory import TrainerFactory
 from reinforce.utils.logger import AimTracker, setup_logger
 
 setup_logger()
@@ -38,105 +32,9 @@ class ExperimentRunner:
     It supports logging via AIM, Optuna pruning, and saving experiment results.
     """
 
-    @staticmethod
-    def _create_environment(env_config: EnvironmentConfig) -> MazeEnvironment:
-        """
-        Create an environment based on the Pydantic configuration model.
-
-        This method creates and returns a `MazeEnvironment` instance based on the provided config model.
-
-        Parameters
-        ----------
-        env_config : Dict[str, Any]
-            Environment configuration.
-
-        Returns
-        -------
-        MazeEnvironment
-            Created environment instance.
-
-        Notes
-        -----
-        Currently only supports `MazeEnvironment`. Needs update if more env types are added.
-        """
-        if env_config.env_type == "MazeEnvironment":
-            return MazeEnvironment(use_image_obs=env_config.use_image_obs)
-        raise ValueError(f"Unsupported environment type: {env_config.env_type}")
-
-    @staticmethod
-    def _create_agent(agent_config: AgentConfigUnion, env_action_space_size: int) -> Union[A2CAgent, PPOAgent]:
-        """
-        Create an agent based on the Pydantic configuration model.
-
-        This method creates and returns an agent instance based on the provided config model.
-        It uses the `agent_type` field to determine which agent class to instantiate.
-
-        Parameters
-        ----------
-        agent_config : AgentConfigUnion
-            Pydantic agent configuration model (e.g., A2CConfig).
-
-        Returns
-        -------
-        Union[A2CAgent, PPOAgent]
-            Created agent instance.
-
-        Raises
-        ------
-        ValueError
-            If the agent type specified in the config is not supported.
-        """
-        if agent_config.agent_type == "A2C":
-            return A2CAgent(model=ResNetACModel(action_space=env_action_space_size), hyperparameters=agent_config)
-        if agent_config.agent_type == "PPO":
-            return PPOAgent(model=ResNetACModel(action_space=env_action_space_size), hyperparameters=agent_config)
-
-        raise ValueError(f"Unsupported agent type: {agent_config.agent_type}")
-
-    @staticmethod
-    def _create_trainer(
-        trainer_config: TrainerConfigUnion,
-        agent: Union[A2CAgent, PPOAgent],
-        environment: BaseEnvironment,
-        tracker: AimTracker,
-    ) -> BaseTrainer:
-        """
-        Create a trainer based on the Pydantic configuration model, injecting dependencies.
-
-        This method creates and returns a trainer instance based on the provided config model.
-        It uses the `trainer_type` field to determine which trainer class to instantiate.
-
-        Parameters
-        ----------
-        trainer_config : TrainerConfigUnion
-            Pydantic trainer configuration model (e.g., EpisodeTrainerConfig).
-        agent : A2CAgent | PPOAgent
-            The agent instance to be trained.
-        environment : BaseEnvironment
-            The environment instance to train in.
-        tracker : AimTracker
-            Tracker instance for experiment tracking.
-
-        Returns
-        -------
-        BaseTrainer
-            Created trainer instance.
-
-        Raises
-        ------
-        ValueError
-            If the trainer type specified in the config is not supported.
-        """
-        if trainer_config.trainer_type == "EpisodeTrainer":
-            return A2CTrainer(agent=agent, environment=environment, config=trainer_config, tracker=tracker)
-
-        if trainer_config.trainer_type == "PPOTrainer":
-            return PPOTrainer(agent=agent, environment=environment, config=trainer_config, tracker=tracker)
-
-        raise ValueError(f"Unsupported trainer type: {trainer_config.trainer_type}")
-
+    @classmethod
     def _setup_experiment(
-        self,
+        cls,
         experiment_config: ExperimentConfig,
         pruning_callback: Optional[Callable[[int, float], None]] = None,
         aim_tags: Optional[List[str]] = None,
@@ -173,16 +71,16 @@ class ExperimentRunner:
         )
         tracker.log_params(experiment_config.environment.model_dump(), prefix="environment")
 
-        # ##: Set up the environment and agent.
-        environment = self._create_environment(experiment_config.environment)
-        agent = self._create_agent(experiment_config.agent, environment.action_space.n)
+        # ##: Set up the environment and agent using factories.
+        environment = EnvironmentFactory.create(experiment_config.environment)
+        agent = AgentFactory.create(experiment_config.agent, environment.action_space.n)
 
         # ##: Pass pruning callback directly if Optuna trial info exists in the config.
         if experiment_config.trial_info is not None:
             experiment_config.trainer.pruning_callback = pruning_callback
 
-        # ##: Create the trainer, injecting all dependencies.
-        trainer = self._create_trainer(
+        # ##: Create the trainer using the factory, injecting all dependencies.
+        trainer = TrainerFactory.create(
             trainer_config=experiment_config.trainer, agent=agent, environment=environment, tracker=tracker
         )
 
