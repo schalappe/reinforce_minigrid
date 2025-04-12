@@ -19,7 +19,7 @@ from reinforce.environments import BaseEnvironment
 from reinforce.learning.evaluation import evaluate_agent
 from reinforce.learning.trainers.base_trainer import BaseTrainer
 from reinforce.utils.buffers import RolloutBuffer
-from reinforce.utils.logger import BaseLogger, setup_logger
+from reinforce.utils.logger import AimTracker, setup_logger
 from reinforce.utils.persistence import save_checkpoint
 
 setup_logger()
@@ -37,7 +37,7 @@ class PPOTrainer(BaseTrainer):
     """
 
     def __init__(
-        self, *, agent: PPOAgent, environment: BaseEnvironment, config: PPOTrainerConfig, logger_instance: BaseLogger
+        self, *, agent: PPOAgent, environment: BaseEnvironment, config: PPOTrainerConfig, tracker: AimTracker
     ):
         """
         Initialize the PPO trainer.
@@ -50,12 +50,12 @@ class PPOTrainer(BaseTrainer):
             The environment to train in.
         config : PPOTrainerConfig
             Pydantic configuration model for the PPO trainer.
-        logger_instance : BaseLogger
+        tracker : BaseLogger
             Logger instance for experiment tracking.
         """
         self.agent = agent
         self.environment = environment
-        self.logger = logger_instance
+        self.tracker = tracker
         self.config = config
 
         # ##: Ensure the save directory exists (keep this).
@@ -80,11 +80,11 @@ class PPOTrainer(BaseTrainer):
         self.timestamp = int(datetime.now().timestamp())
 
         # ##: Log hyperparameters using injected logger.
-        self.logger.log_params(
+        self.tracker.log_params(
             self.config.model_dump(exclude={"trial_info", "pruning_callback", "trainer_type"}), prefix="trainer"
         )
         # ##: Also log agent hyperparameters.
-        self.logger.log_params(self.agent.hyperparameters.model_dump(), prefix="agent")
+        self.tracker.log_params(self.agent.hyperparameters.model_dump(), prefix="agent")
 
     def train(self) -> Dict[str, Any]:
         """
@@ -134,7 +134,7 @@ class PPOTrainer(BaseTrainer):
                     mean_reward_100 = mean(self.episode_rewards) if self.episode_rewards else 0
 
                     # ##: Log episode metrics directly using logger.
-                    self.logger.log_metrics(
+                    self.tracker.log_metrics(
                         {
                             "episode_reward": current_episode_reward,
                             "episode_steps": current_episode_steps,
@@ -172,7 +172,7 @@ class PPOTrainer(BaseTrainer):
                         )
 
                         # ##: Log evaluation metrics using injected logger.
-                        self.logger.log_metrics(
+                        self.tracker.log_metrics(
                             {
                                 "eval_mean_reward": mean_eval_reward,
                                 "eval_max_reward": eval_metrics["max_reward"],
@@ -230,7 +230,7 @@ class PPOTrainer(BaseTrainer):
                     if values:
                         aggregated_metrics[f"update_{key}_mean"] = np.mean(values)
                 # ##: Log aggregated metrics to AIM.
-                self.logger.log_metrics(
+                self.tracker.log_metrics(
                     aggregated_metrics,
                     step=self.total_steps,
                     epoch=self.episode,
@@ -253,7 +253,7 @@ class PPOTrainer(BaseTrainer):
                     agent=self.agent,
                     save_path_base=checkpoint_path_base,
                     trainer_state=trainer_state,
-                    logger_instance=self.logger,
+                    tracker=self.tracker,
                 )
 
         # ##: Final evaluation after training loop using Evaluator.
@@ -264,13 +264,13 @@ class PPOTrainer(BaseTrainer):
             max_steps_per_episode=self.config.max_steps_per_episode,
         )
         logger.info(f"Final Evaluation Mean Reward: {final_eval_metrics['mean_reward']:.2f}")
-        self.logger.log_metrics(
+        self.tracker.log_metrics(
             {f"final_{k}": v for k, v in final_eval_metrics.items() if k != "rewards"},
             step=self.total_steps,
             epoch=self.episode,
             context={"subset": "final_eval"},  # Add context
         )
-        self.logger.log_params({"final_total_steps": self.total_steps, "final_episodes": self.episode})
+        self.tracker.log_params({"final_total_steps": self.total_steps, "final_episodes": self.episode})
 
         return {
             "episodes": self.episode,

@@ -25,7 +25,7 @@ from reinforce.configs.models import (
 from reinforce.environments import BaseEnvironment
 from reinforce.environments.minigrid import MazeEnvironment
 from reinforce.learning.trainers import BaseTrainer, EpisodeTrainer, PPOTrainer
-from reinforce.utils.logger import AimLogger, BaseLogger, setup_logger
+from reinforce.utils.logger import AimTracker, setup_logger
 
 setup_logger()
 
@@ -98,7 +98,7 @@ class ExperimentRunner:
         trainer_config: TrainerConfigUnion,
         agent: Union[A2CAgent, PPOAgent],
         environment: BaseEnvironment,
-        logger_instance: BaseLogger,
+        tracker: AimTracker,
     ) -> BaseTrainer:
         """
         Create a trainer based on the Pydantic configuration model, injecting dependencies.
@@ -114,8 +114,8 @@ class ExperimentRunner:
             The agent instance to be trained.
         environment : BaseEnvironment
             The environment instance to train in.
-        logger_instance : BaseLogger
-            Logger instance for experiment tracking.
+        tracker : AimTracker
+            Tracker instance for experiment tracking.
 
         Returns
         -------
@@ -126,17 +126,12 @@ class ExperimentRunner:
         ------
         ValueError
             If the trainer type specified in the config is not supported.
-            If required dependencies (logger, evaluator, checkpoint_manager) are missing.
         """
         if trainer_config.trainer_type == "EpisodeTrainer":
-            return EpisodeTrainer(
-                agent=agent, environment=environment, config=trainer_config, logger_instance=logger_instance
-            )
+            return EpisodeTrainer(agent=agent, environment=environment, config=trainer_config, tracker=tracker)
 
         if trainer_config.trainer_type == "PPOTrainer":
-            return PPOTrainer(
-                agent=agent, environment=environment, config=trainer_config, logger_instance=logger_instance
-            )
+            return PPOTrainer(agent=agent, environment=environment, config=trainer_config, tracker=tracker)
 
         raise ValueError(f"Unsupported trainer type: {trainer_config.trainer_type}")
 
@@ -145,7 +140,7 @@ class ExperimentRunner:
         experiment_config: ExperimentConfig,
         pruning_callback: Optional[Callable[[int, float], None]] = None,
         aim_tags: Optional[List[str]] = None,
-    ) -> Tuple[BaseTrainer, BaseLogger]:
+    ) -> Tuple[BaseTrainer, AimTracker]:
         """
         Set up the experiment components: config, logger, evaluator, checkpoint_manager, env, agent, trainer.
 
@@ -163,23 +158,20 @@ class ExperimentRunner:
 
         Returns
         -------
-        Tuple[BaseTrainer, BaseLogger]
-            A tuple containing the initialized trainer and the logger instance.
+        Tuple[BaseTrainer, AimTracker]
+            A tuple containing the initialized trainer and the tracker instance.
         """
-        # ##: Initialize Logger (using AimLogger implementation for now).
+        # ##: Initialize Tracker.
         base_tags = ["reinforce", experiment_config.agent.agent_type]
         if aim_tags:
             base_tags.extend(aim_tags)
-
-        logger_instance: BaseLogger = AimLogger(
-            experiment_name=experiment_config.aim_experiment_name, tags=list(set(base_tags))
-        )
+        tracker = AimTracker(experiment_name=experiment_config.aim_experiment_name, tags=list(set(base_tags)))
 
         # ##: Log Pydantic models by dumping them to dicts using the logger instance.
-        logger_instance.log_params(
+        tracker.log_params(
             experiment_config.model_dump(exclude={"agent", "trainer", "environment"}), prefix="experiment"
         )
-        logger_instance.log_params(experiment_config.environment.model_dump(), prefix="environment")
+        tracker.log_params(experiment_config.environment.model_dump(), prefix="environment")
 
         # ##: Set up the environment and agent.
         environment = self._create_environment(experiment_config.environment)
@@ -191,13 +183,10 @@ class ExperimentRunner:
 
         # ##: Create the trainer, injecting all dependencies.
         trainer = self._create_trainer(
-            trainer_config=experiment_config.trainer,
-            agent=agent,
-            environment=environment,
-            logger_instance=logger_instance,
+            trainer_config=experiment_config.trainer, agent=agent, environment=environment, tracker=tracker
         )
 
-        return trainer, logger_instance  # Return the logger instance (as BaseLogger)
+        return trainer, tracker
 
     def run_experiment(
         self,
@@ -235,7 +224,7 @@ class ExperimentRunner:
             If any error occurs during experiment execution.
         """
         start_time = time()
-        logger_instance: Optional[BaseLogger] = None
+        logger_instance: Optional[AimTracker] = None
 
         try:
             # ##: Setup experiment components using the helper method.

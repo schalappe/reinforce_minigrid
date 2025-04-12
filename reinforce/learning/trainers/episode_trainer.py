@@ -20,7 +20,7 @@ from reinforce.configs.models import EpisodeTrainerConfig
 from reinforce.environments import BaseEnvironment
 from reinforce.learning.evaluation import evaluate_agent
 from reinforce.learning.trainers.base_trainer import BaseTrainer
-from reinforce.utils.logger import BaseLogger, setup_logger
+from reinforce.utils.logger import AimTracker, setup_logger
 from reinforce.utils.persistence import save_checkpoint
 from reinforce.utils.preprocessing import preprocess_observation
 
@@ -36,12 +36,7 @@ class EpisodeTrainer(BaseTrainer):
     """
 
     def __init__(
-        self,
-        *,
-        agent: BaseAgent,
-        environment: BaseEnvironment,
-        config: EpisodeTrainerConfig,
-        logger_instance: BaseLogger,
+        self, *, agent: BaseAgent, environment: BaseEnvironment, config: EpisodeTrainerConfig, tracker: AimTracker
     ):
         """
         Initialize the episode trainer.
@@ -54,12 +49,12 @@ class EpisodeTrainer(BaseTrainer):
             The environment to train in.
         config : EpisodeTrainerConfig
             Pydantic configuration model for the trainer.
-        logger_instance : BaseLogger
-            Logger instance for experiment tracking.
+        tracker : AimTracker
+            Tracker instance for experiment tracking.
         """
         self.agent = agent
         self.environment = environment
-        self.logger = logger_instance
+        self.tracker = tracker
         self.config = config
 
         # ##: Ensure the save directory exists (keep this logic here).
@@ -74,10 +69,10 @@ class EpisodeTrainer(BaseTrainer):
         self.timestamp = int(datetime.now().timestamp())  # Keep timestamp generation
 
         # ##: Log hyperparameters using the injected logger.
-        self.logger.log_params(
+        self.tracker.log_params(
             self.config.model_dump(exclude={"trial_info", "pruning_callback", "trainer_type"}), prefix="trainer"
         )
-        self.logger.log_params(self.agent.hyperparameters.model_dump(), prefix="agent")
+        self.tracker.log_params(self.agent.hyperparameters.model_dump(), prefix="agent")
 
     def _run_episode_step(self, observation: Any) -> tuple:
         """Runs a single step within an episode."""
@@ -116,7 +111,7 @@ class EpisodeTrainer(BaseTrainer):
 
         # ##: Log agent learning info.
         if learn_info and isinstance(learn_info, dict):
-            self.logger.log_metrics(
+            self.tracker.log_metrics(
                 learn_info, step=self.total_steps, epoch=self.episode, context={"subset": "train_update"}
             )
 
@@ -124,7 +119,7 @@ class EpisodeTrainer(BaseTrainer):
         if last_agent_info and isinstance(last_agent_info, dict):
             if "action_probs" in last_agent_info:
                 try:
-                    self.logger.log_metric(
+                    self.tracker.log_metric(
                         name="action_probabilities",
                         value=Distribution(last_agent_info["action_probs"]),
                         step=self.total_steps,
@@ -138,7 +133,7 @@ class EpisodeTrainer(BaseTrainer):
             other_agent_metrics = {k: v for k, v in last_agent_info.items() if k != "action_probs"}
             scalar_agent_metrics = {k: v for k, v in other_agent_metrics.items() if isscalar(v)}
             if scalar_agent_metrics:
-                self.logger.log_metrics(
+                self.tracker.log_metrics(
                     scalar_agent_metrics,
                     step=self.total_steps,
                     epoch=self.episode,
@@ -168,7 +163,7 @@ class EpisodeTrainer(BaseTrainer):
             observations, actions, rewards, next_observations, dones, agent_infos = [], [], [], [], [], []
 
             # ##: Run one episode.
-            for step in range(self.config.max_steps_per_episode):
+            for _ in range(self.config.max_steps_per_episode):
                 # ##: Run one step in the environment (using raw observation).
                 next_observation, reward, done, action, agent_info = self._run_episode_step(observation)
 
@@ -197,7 +192,7 @@ class EpisodeTrainer(BaseTrainer):
             # ##: Log episode metrics directly using the logger.
             self.episode_rewards.append(episode_reward)
             mean_reward_100 = mean(self.episode_rewards) if self.episode_rewards else 0
-            self.logger.log_metrics(
+            self.tracker.log_metrics(
                 {"episode_reward": episode_reward, "episode_steps": episode_steps, "mean_reward_100": mean_reward_100},
                 step=self.total_steps,
                 epoch=self.episode + 1,
@@ -233,7 +228,7 @@ class EpisodeTrainer(BaseTrainer):
                 )
 
                 # ##: Log evaluation metrics using the injected logger.
-                self.logger.log_metrics(
+                self.tracker.log_metrics(
                     {
                         "eval_mean_reward": mean_eval_reward,
                         "eval_max_reward": eval_metrics["max_reward"],
@@ -273,7 +268,7 @@ class EpisodeTrainer(BaseTrainer):
                     agent=self.agent,
                     save_path_base=checkpoint_path_base,
                     trainer_state=trainer_state,
-                    logger_instance=self.logger,
+                    tracker=self.tracker,
                 )
 
         # ##: Final evaluation after training loop.
@@ -284,13 +279,13 @@ class EpisodeTrainer(BaseTrainer):
             max_steps_per_episode=self.config.max_steps_per_episode,
         )
         logger.info(f"Final Evaluation Mean Reward: {final_eval_metrics['mean_reward']:.2f}")
-        self.logger.log_metrics(
+        self.tracker.log_metrics(
             {f"final_{k}": v for k, v in final_eval_metrics.items() if k != "rewards"},
             step=self.total_steps,
             epoch=self.episode + 1,
             context={"subset": "final_eval"},
         )
-        self.logger.log_params({"final_total_steps": self.total_steps, "final_episodes": self.episode + 1})
+        self.tracker.log_params({"final_total_steps": self.total_steps, "final_episodes": self.episode + 1})
 
         # ##: Save the final model if a path is specified in the config (Keep this logic).
         if self.config.save_path:

@@ -20,7 +20,7 @@ from optuna.trial import Trial, TrialState
 from reinforce.configs.manager.reader import YamlReader
 from reinforce.configs.models import ExperimentConfig
 from reinforce.experiments.experiment_runner import ExperimentRunner
-from reinforce.utils.logger import AimLogger, setup_logger
+from reinforce.utils.logger import AimTracker, setup_logger
 
 setup_logger()
 
@@ -41,7 +41,7 @@ class HyperparameterSearch:
     base_config: Optional[Dict[str, Any]] = None
     search_name: Optional[str] = None
 
-    def _setup_search_logging(self, search_name: str, n_trials: int) -> AimLogger:
+    def _setup_search_logging(self, search_name: str, n_trials: int) -> AimTracker:
         """
         Initialize AIM logger for the search and log setup parameters.
 
@@ -58,7 +58,7 @@ class HyperparameterSearch:
 
         Returns
         -------
-        AimLogger
+        AimTracker
             An AimLogger instance if the initialization was successful.
 
         Raises
@@ -66,7 +66,7 @@ class HyperparameterSearch:
         Exception
             If there are issues with initializing the AimLogger.
         """
-        search_aim_logger = AimLogger(
+        search_aim_logger = AimTracker(
             experiment_name=f"hyperparameter_{search_name}", tags=["hyperparameter-search", "summary", search_name]
         )
         search_aim_logger.log_params({"n_trials": n_trials}, prefix="search_setup")
@@ -74,7 +74,7 @@ class HyperparameterSearch:
 
         return search_aim_logger
 
-    def _load_configs(self, search_config_path: Union[str, Path], search_aim_logger: AimLogger) -> None:
+    def _load_configs(self, search_config_path: Union[str, Path], search_aim_logger: AimTracker) -> None:
         """
         Loads the hyperparameter search configuration.
 
@@ -82,7 +82,7 @@ class HyperparameterSearch:
         ----------
         search_config_path : Union[str, Path]
             Path to the hyperparameter search configuration file.
-        search_aim_logger : AimLogger
+        search_aim_logger : AimTracker
             AimLogger instance for logging.
 
         Raises
@@ -141,7 +141,7 @@ class HyperparameterSearch:
             logger.warning("Using in-memory storage instead.")
             self.study = create_study(study_name=self.search_name, direction="maximize", pruner=pruner)
 
-    def _run_optimization(self, n_trials: int, search_aim_logger: AimLogger) -> None:
+    def _run_optimization(self, n_trials: int, search_aim_logger: AimTracker) -> None:
         """
         Run the Optuna optimization process.
 
@@ -152,7 +152,7 @@ class HyperparameterSearch:
         ----------
         n_trials : int
             Number of trials to run in the hyperparameter search.
-        search_aim_logger : AimLogger
+        search_aim_logger : AimTracker
             AimLogger instance for logging.
 
         Raises
@@ -172,7 +172,7 @@ class HyperparameterSearch:
             search_aim_logger.log_text(f"Optimization failed: {exc}\n{format_exc()}", name="error_log")
             raise
 
-    def _summarize_and_save_results(self, search_aim_logger: AimLogger) -> Dict[str, Any]:
+    def _summarize_and_save_results(self, search_aim_logger: AimTracker) -> Dict[str, Any]:
         """
         Prepare, save, and log the search summary and visualizations.
 
@@ -182,7 +182,7 @@ class HyperparameterSearch:
 
         Parameters
         ----------
-        search_aim_logger : AimLogger
+        search_aim_logger : AimTracker
             AimLogger instance for logging.
 
         Returns

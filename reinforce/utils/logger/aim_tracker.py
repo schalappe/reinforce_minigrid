@@ -3,27 +3,24 @@
 Utility for AIM experiment tracking.
 
 This module provides a wrapper class `AimLogger` for streamlined interaction with the Aim experiment tracking library.
-It simplifies initializing runs, logging various data types (parameters, metrics, artifacts, images, text), and
-managing the run lifecycle.
+It simplifies initializing runs, logging various data types, and managing the run lifecycle.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
-from aim.sdk.objects import Image as AimImage
 from aim.sdk.objects import Text as AimText
 from aim.sdk.run import Run
 from loguru import logger
 
-from reinforce.utils.logger.base_logger import BaseLogger
 from reinforce.utils.logger.logging_setup import setup_logger
 
 setup_logger()
 
 
-class AimLogger(BaseLogger):
+class AimTracker:
     """
     An implementation of BaseLogger using AIM experiment tracking.
 
@@ -47,14 +44,16 @@ class AimLogger(BaseLogger):
         if not experiment_name:
             raise ValueError("experiment_name cannot be empty.")
 
-        self._run: Optional[Run] = None
         self._repo_path: Union[str, Path] = repo_path
         self._experiment_name: str = experiment_name
         self._tags: List[str] = tags or []
 
-        self._initialize_run()
+        self._run = Run(repo=self._repo_path, experiment=self._experiment_name)
+        self._add_tags(self._tags)
 
-    def __enter__(self) -> AimLogger:
+        logger.info(f"AIM Run initialized: Name='{self._run.name}', Hash='{self.run_hash}'")
+
+    def __enter__(self) -> AimTracker:
         """Enter the runtime context related to this object."""
         return self
 
@@ -62,57 +61,19 @@ class AimLogger(BaseLogger):
         """Exit the runtime context and close the AIM run."""
         self.close()
 
-    def _initialize_run(self):
-        """Initialize the AIM Run object and set system params."""
-        if self._run:
-            logger.warning(f"AIM Run ({self.run_hash}) already initialized. Skipping re-initialization.")
-            return
-
-        self._run = Run(repo=self._repo_path, experiment=self._experiment_name)
-        logger.info(f"AIM Run initialized: Name='{self._run.name}', Hash='{self.run_hash}'")
-
-        # ##: Add tags if provided.
-        if self._tags:
-            current_tags = set(self._run.props.tags)
-            new_tags = set(self._tags)
-            for tag in new_tags - current_tags:
-                self._run.add_tag(tag)
-                logger.debug(f"Added tag '{tag}' to run {self.run_hash}")
-
-    def _safe_run_operation(self, operation: Callable[..., Any], description: str, *args: Any, **kwargs: Any) -> bool:
+    def _add_tags(self, tags: List[str]):
         """
-        Safely execute an operation on the AIM Run object.
-
-        Handles checking if the run exists and catches exceptions during the operation.
+        Add tags to the AIM run.
 
         Parameters
         ----------
-        operation : Callable[..., Any]
-            The AIM Run method or operation to execute (e.g., self._run.track, self._run.set).
-        description : str
-            A description of the operation for logging purposes (e.g., "logging metric 'reward'").
-        *args : Any
-            Positional arguments for the operation.
-        **kwargs : Any
-            Keyword arguments for the operation.
-
-        Returns
-        -------
-        bool
-            True if the operation was successful, False otherwise.
+        tags : List[str]
+            List of tags to add to the run.
         """
-        if not self._run:
-            logger.warning(f"AIM Run not initialized. Cannot perform operation: {description}.")
-            return False
-        try:
-            operation(*args, **kwargs)
-            logger.debug(f"Successfully performed operation: {description} (Run: {self.run_hash})")
-            return True
-        except Exception as exc:
-            logger.error(
-                f"Error performing operation '{description}' on AIM Run {self.run_hash}: {exc}", exc_info=False
-            )
-            return False
+        new_tags = set(tags) - set(self._run.props.tags)
+        for tag in new_tags:
+            self._run.add_tag(tag)
+            logger.debug(f"Added tag '{tag}' to run {self.run_hash}")
 
     @property
     def run(self) -> Optional[Run]:
@@ -152,21 +113,8 @@ class AimLogger(BaseLogger):
             If provided, keys in the params dictionary will be prefixed with f"{prefix}.".
             Defaults to None.
         """
-        if prefix:
-            processed_params = {f"{prefix}.{k}": v for k, v in params.items()}
-        else:
-            processed_params = params
-
-        if not processed_params:
-            logger.warning("No parameters provided to log_params after processing prefix.")
-            return
-
-        op_desc = f"logging parameters with prefix '{prefix}'" if prefix else "logging parameters"
-        self._safe_run_operation(
-            lambda p: self._run.set("hparams", {**self._run.get("hparams", {}), **p}, strict=False),
-            op_desc,
-            processed_params,
-        )
+        processed_params = {f"{prefix}.{k}": v for k, v in params.items()} if prefix else params
+        self._run.set("hparams", {**self._run.get("hparams", {}), **processed_params}, strict=False)
 
     def log_metric(
         self,
@@ -193,10 +141,7 @@ class AimLogger(BaseLogger):
         context : Optional[Dict[str, Any]], optional
             Additional context for the metric (e.g., {'subset': 'train'}). Defaults to None.
         """
-        op_desc = f"logging metric '{name}' (Step: {step}, Epoch: {epoch})"
-        self._safe_run_operation(
-            self._run.track, op_desc, value, name=name, step=step, epoch=epoch, context=context or {}
-        )
+        self._run.track(value, name=name, step=step, epoch=epoch, context=context or {})
 
     def log_metrics(
         self,
@@ -251,15 +196,14 @@ class AimLogger(BaseLogger):
         parameters under `artifacts/{name}`.
         """
         artifact_info: Dict[str, Any] = {"name": name, "type": type(artifact_data).__name__}
+
         if path:
             artifact_info["path"] = str(path)
+
         if meta:
             artifact_info["metadata"] = meta
 
-        op_desc = f"logging artifact info for '{name}'"
-        self._safe_run_operation(
-            lambda key, value: self._run.set(key, value, strict=False), op_desc, f"artifacts/{name}", artifact_info
-        )
+        self._run.set(f"artifacts/{name}", artifact_info, strict=False)
 
     def log_text(
         self,
@@ -285,10 +229,6 @@ class AimLogger(BaseLogger):
             The epoch number for the text. Defaults to None.
         context : Optional[Dict[str, Any]], optional
             Additional context for the text. Defaults to None.
-
-        Examples
-        --------
-        >>> AimLogger.log_text("Episode finished after 150 steps.", "episode_log", step=150)
         """
         try:
             aim_text = AimText(text_data)
@@ -296,10 +236,7 @@ class AimLogger(BaseLogger):
             logger.error(f"Failed to create aim.Text object for '{name}': {exc}. Skipping log_text.")
             return
 
-        op_desc = f"logging text '{name}' (Step: {step}, Epoch: {epoch})"
-        self._safe_run_operation(
-            self._run.track, op_desc, aim_text, name=name, step=step, epoch=epoch, context=context or {}
-        )
+        self._run.track(aim_text, name=name, step=step, epoch=epoch, context=context or {})
 
     def close(self) -> None:
         """
@@ -309,12 +246,8 @@ class AimLogger(BaseLogger):
         """
         if self._run:
             run_hash = self.run_hash
-            try:
-                self._run.close()
-                logger.info(f"AIM Run closed successfully: {run_hash}")
-            except Exception as exc:
-                logger.error(f"Error closing AIM Run {run_hash}: {exc}", exc_info=True)
-            finally:
-                self._run = None
+            self._run.close()
+            self._run = None
+            logger.info(f"AIM Run closed successfully: {run_hash}")
         else:
             logger.info("No active AIM Run to close (already closed or initialization failed).")

@@ -9,14 +9,14 @@ from typing import Any, Dict, Union
 from loguru import logger
 
 from reinforce.agents import BaseAgent
-from reinforce.utils.logger import BaseLogger, setup_logger
+from reinforce.utils.logger import AimTracker, setup_logger
 
 setup_logger()
 
 
 def save_checkpoint(
-    agent: BaseAgent, save_path_base: Union[str, Path], trainer_state: Dict[str, Any], logger_instance: BaseLogger
-) -> None:
+    agent: BaseAgent, save_path_base: Union[str, Path], trainer_state: Dict[str, Any], tracker: AimTracker
+):
     """
     Save the agent's state and the trainer's state.
 
@@ -31,8 +31,8 @@ def save_checkpoint(
         The base directory path for saving the checkpoint. The directory will be created if it doesn't exist.
     trainer_state : Dict[str, Any]
         A dictionary containing the current state of the trainer
-    logger_instance : BaseLogger
-        A logger instance conforming to BaseLogger to log artifact information about the checkpoint.
+    tracker : AimTracker
+        A tracker instance to log artifact information about the checkpoint.
     """
     path_obj = Path(save_path_base)
     path_obj.mkdir(parents=True, exist_ok=True)
@@ -53,7 +53,5 @@ def save_checkpoint(
         **{k: v for k, v in trainer_state.items() if k not in ["episode", "total_steps"]},
     }
 
-    logger_instance.log_artifact(
-        artifact_data=trainer_state, name=artifact_name, path=str(path_obj.resolve()), meta=meta
-    )
+    tracker.log_artifact(artifact_data=trainer_state, name=artifact_name, path=str(path_obj.resolve()), meta=meta)
     logger.info(f"Checkpoint saved successfully to: {path_obj}")
