@@ -3,6 +3,8 @@ trainer_type: EpisodeTrainer
 max_episodes: 10000
 max_steps_per_episode: 100
 update_frequency: 1  # Update agent after each step
+buffer_capacity: 10000 # Size of the replay buffer
+batch_size: 64 # Batch size for sampling from buffer
 eval_frequency: 100  # Evaluate every 100 episodes
 num_eval_episodes: 5
 gamma: 0.99  # Discount factor

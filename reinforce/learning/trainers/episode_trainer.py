@@ -20,6 +20,7 @@ from reinforce.configs.models import EpisodeTrainerConfig
 from reinforce.environments import BaseEnvironment
 from reinforce.learning.evaluation import evaluate_agent
 from reinforce.learning.trainers.base_trainer import BaseTrainer
+from reinforce.utils.buffers import ReplayBuffer
 from reinforce.utils.logger import AimTracker, setup_logger
 from reinforce.utils.persistence import save_checkpoint
 from reinforce.utils.preprocessing import preprocess_observation
@@ -65,6 +66,13 @@ class EpisodeTrainer(BaseTrainer):
         self.total_steps = 0
         self.episode_rewards = deque(maxlen=100)
 
+        # ##: Initialize Replay Buffer
+        self.buffer = ReplayBuffer(
+            capacity=self.config.buffer_capacity,
+            observation_shape=self.environment.observation_space.shape,
+            action_shape=self.environment.action_space.shape,
+        )
+
         # ##: Timestamp for saving models (can be useful even with AIM).
         self.timestamp = int(datetime.now().timestamp())  # Keep timestamp generation
 
@@ -80,65 +88,7 @@ class EpisodeTrainer(BaseTrainer):
         next_observation, reward, done, _ = self.environment.step(action)
         return next_observation, reward, done, action, agent_info
 
-    def _handle_agent_update(
-        self,
-        observations: List,
-        actions: List,
-        rewards: List,
-        next_observations: List,
-        dones: List,
-        agent_infos: List[Dict],
-    ) -> None:
-        """Handles the agent learning step and associated logging using tf.data."""
-        # ##: Preprocess observations and next_observations here.
-        # ##: Use tf.stack to handle the list of numpy arrays correctly.
-        processed_observations = tf.stack([preprocess_observation(obs) for obs in observations])
-        processed_next_observations = tf.stack([preprocess_observation(n_obs) for n_obs in next_observations])
-
-        # ##: Convert other lists to tensors.
-        tf_actions = tf.convert_to_tensor(actions, dtype=tf.int32)
-        tf_rewards = tf.convert_to_tensor(rewards, dtype=tf.float32)
-        tf_dones = tf.convert_to_tensor(dones, dtype=tf.float32)  # Use float for TF compatibility
-
-        # ##: Pass tensors directly to agent.learn.
-        logger.debug("Calling agent.learn with prepared tensors...")
-        batch_tensors = (processed_observations, tf_actions, tf_rewards, processed_next_observations, tf_dones)
-        learn_info = self.agent.learn(batch_tensors)
-        logger.debug("agent.learn call completed.")
-
-        # ##: Logging needs access to the last agent_info from the batch.
-        last_agent_info = agent_infos[-1] if agent_infos else {}
-
-        # ##: Log agent learning info.
-        if learn_info and isinstance(learn_info, dict):
-            self.tracker.log_metrics(
-                learn_info, step=self.total_steps, epoch=self.episode, context={"subset": "train_update"}
-            )
-
-        # ##: Log agent action info (use last_agent_info).
-        if last_agent_info and isinstance(last_agent_info, dict):
-            if "action_probs" in last_agent_info:
-                try:
-                    self.tracker.log_metric(
-                        name="action_probabilities",
-                        value=Distribution(last_agent_info["action_probs"]),
-                        step=self.total_steps,
-                        epoch=self.episode,
-                        context={"subset": "train"},
-                    )
-                except Exception as exc:
-                    logger.warning(f"Could not log action probabilities distribution: {exc}")
-
-            # ##: Log other scalar metrics from last_agent_info.
-            other_agent_metrics = {k: v for k, v in last_agent_info.items() if k != "action_probs"}
-            scalar_agent_metrics = {k: v for k, v in other_agent_metrics.items() if isscalar(v)}
-            if scalar_agent_metrics:
-                self.tracker.log_metrics(
-                    scalar_agent_metrics,
-                    step=self.total_steps,
-                    epoch=self.episode,
-                    context={"subset": "train_action"},
-                )
+    # ##: Removed _handle_agent_update method as logic is moved into train loop
 
     def train(self) -> Dict[str, Any]:
         """
@@ -159,21 +109,20 @@ class EpisodeTrainer(BaseTrainer):
             episode_reward = 0
             episode_steps = 0
 
-            # ##: Store experiences for batch updates (store raw obs).
-            observations, actions, rewards, next_observations, dones, agent_infos = [], [], [], [], [], []
-
             # ##: Run one episode.
             for _ in range(self.config.max_steps_per_episode):
                 # ##: Run one step in the environment (using raw observation).
                 next_observation, reward, done, action, agent_info = self._run_episode_step(observation)
 
-                # ##: Store raw experience.
-                observations.append(observation)
-                actions.append(action)
-                rewards.append(reward)
-                next_observations.append(next_observation)
-                dones.append(done)
-                agent_infos.append(agent_info)
+                # ##: Store experience in the buffer.
+                experience = {
+                    "observation": observation,
+                    "action": action,
+                    "reward": reward,
+                    "next_observation": next_observation,
+                    "done": done,
+                }
+                self.buffer.add(experience)
 
                 # ##: Update state (use raw observation for next step).
                 observation = next_observation
@@ -181,10 +130,64 @@ class EpisodeTrainer(BaseTrainer):
                 episode_steps += 1
                 self.total_steps += 1
 
-                # ##: Update the agent if it's time.
-                if self.total_steps % self.config.update_frequency == 0 and len(observations) > 0:
-                    self._handle_agent_update(observations, actions, rewards, next_observations, dones, agent_infos)
-                    observations, actions, rewards, next_observations, dones, agent_infos = [], [], [], [], [], []
+                # ##: Update the agent if it's time and buffer has enough samples.
+                if self.total_steps % self.config.update_frequency == 0 and self.buffer.can_sample(
+                    self.config.batch_size
+                ):
+                    # ##: Sample batch from buffer.
+                    batch = self.buffer.sample(self.config.batch_size)
+
+                    # ##: Preprocess and convert to tensors.
+                    processed_observations = tf.stack([preprocess_observation(obs) for obs in batch["observations"]])
+                    processed_next_observations = tf.stack(
+                        [preprocess_observation(n_obs) for n_obs in batch["next_observations"]]
+                    )
+                    tf_actions = tf.convert_to_tensor(batch["actions"], dtype=tf.int32)
+                    tf_rewards = tf.convert_to_tensor(batch["rewards"], dtype=tf.float32)
+                    tf_dones = tf.convert_to_tensor(batch["dones"], dtype=tf.float32)
+
+                    # ##: Pass tensors directly to agent.learn.
+                    logger.debug("Calling agent.learn with sampled batch...")
+                    batch_tensors = (
+                        processed_observations,
+                        tf_actions,
+                        tf_rewards,
+                        processed_next_observations,
+                        tf_dones,
+                    )
+                    learn_info = self.agent.learn(batch_tensors)
+                    logger.debug("agent.learn call completed.")
+
+                    # ##: Log agent learning info.
+                    if learn_info and isinstance(learn_info, dict):
+                        self.tracker.log_metrics(
+                            learn_info, step=self.total_steps, epoch=self.episode, context={"subset": "train_update"}
+                        )
+
+                    # ##: Log agent action info (use last_agent_info from the episode step).
+                    if agent_info and isinstance(agent_info, dict):
+                        if "action_probs" in agent_info:
+                            try:
+                                self.tracker.log_metric(
+                                    name="action_probabilities",
+                                    value=Distribution(agent_info["action_probs"]),
+                                    step=self.total_steps,
+                                    epoch=self.episode,
+                                    context={"subset": "train"},
+                                )
+                            except Exception as exc:
+                                logger.warning(f"Could not log action probabilities distribution: {exc}")
+
+                        # ##: Log other scalar metrics from last_agent_info.
+                        other_agent_metrics = {k: v for k, v in agent_info.items() if k != "action_probs"}
+                        scalar_agent_metrics = {k: v for k, v in other_agent_metrics.items() if isscalar(v)}
+                        if scalar_agent_metrics:
+                            self.tracker.log_metrics(
+                                scalar_agent_metrics,
+                                step=self.total_steps,
+                                epoch=self.episode,
+                                context={"subset": "train_action"},
+                            )
 
                 if done:
                     break

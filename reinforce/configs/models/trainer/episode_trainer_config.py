@@ -39,3 +39,5 @@ class EpisodeTrainerConfig(TrainerConfig):
     trainer_type: Literal["EpisodeTrainer"] = "EpisodeTrainer"
     max_episodes: int = Field(10000, ge=1, description="Maximum number of episodes to train for")
     update_frequency: int = Field(1, ge=1, description="Number of steps between agent updates")
+    buffer_capacity: int = Field(10000, ge=1, description="Capacity of the replay buffer")
+    batch_size: int = Field(64, ge=1, description="Batch size for sampling from the replay buffer")
