@@ -41,7 +41,7 @@ class ConfigManager:
         ValueError
             If the file format is not supported or validation fails.
         """
-        raw_config = YamlReader().read(path)
+        raw_config = YamlReader().read(Path(path))
 
         try:
             return model_cls(**raw_config)
