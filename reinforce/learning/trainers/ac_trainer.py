@@ -16,7 +16,7 @@ from loguru import logger
 from numpy import isscalar, ndarray
 
 from reinforce.agents.actor_critic import A2CAgent, PPOAgent
-from reinforce.configs.models import A2CTrainerConfig, PPOTrainerConfig
+from reinforce.configs.models.trainer import A2CTrainerConfig, PPOTrainerConfig
 from reinforce.environments import BaseEnvironment
 from reinforce.learning.evaluation import evaluate_agent
 from reinforce.learning.trainers.base_trainer import BaseTrainer

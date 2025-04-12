@@ -3,7 +3,7 @@
 Factory for creating environment instances.
 """
 
-from reinforce.configs.models import EnvironmentConfig
+from reinforce.configs.models.environment import EnvironmentConfig
 from reinforce.environments.minigrid import MazeEnvironment
 
 

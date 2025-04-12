@@ -11,7 +11,7 @@ from keras import Model
 from numpy import ndarray
 
 from reinforce.agents.actor_critic.ac_agent import ActorCriticAgent
-from reinforce.configs.models import PPOConfig
+from reinforce.configs.models.agent import PPOConfig
 from reinforce.utils.preprocessing import preprocess_observation
 
 

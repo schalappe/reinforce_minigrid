@@ -6,12 +6,13 @@ Factory for creating trainer instances.
 from typing import Union
 
 from reinforce.agents.actor_critic import A2CAgent, PPOAgent
-from reinforce.configs.models import TrainerConfigUnion
+from reinforce.configs.models.trainer import A2CTrainerConfig, PPOTrainerConfig
 from reinforce.environments import BaseEnvironment
 from reinforce.learning.trainers import A2CTrainer, BaseTrainer, PPOTrainer
 from reinforce.utils.management import AimTracker
 
 Agent = Union[A2CAgent, PPOAgent]
+Trainer = Union[A2CTrainerConfig, PPOTrainerConfig]
 
 
 class TrainerFactory:
@@ -19,7 +20,7 @@ class TrainerFactory:
 
     @staticmethod
     def create(
-        trainer_config: TrainerConfigUnion, agent: Agent, environment: BaseEnvironment, tracker: AimTracker
+        trainer_config: Trainer, agent: Agent, environment: BaseEnvironment, tracker: AimTracker
     ) -> BaseTrainer:
         """
         Create a trainer based on the Pydantic configuration model, injecting dependencies.
@@ -29,7 +30,7 @@ class TrainerFactory:
 
         Parameters
         ----------
-        trainer_config : TrainerConfigUnion
+        trainer_config : A2CTrainerConfig | PPOTrainerConfig
             Pydantic trainer configuration model (e.g., A2CTrainerConfig).
         agent : A2CAgent | PPOAgent
             The agent instance to be trained.

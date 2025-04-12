@@ -10,7 +10,7 @@ import tensorflow as tf
 from loguru import logger
 
 from reinforce.agents.actor_critic import A2CAgent
-from reinforce.configs.models import A2CTrainerConfig
+from reinforce.configs.models.trainer import A2CTrainerConfig
 from reinforce.environments import BaseEnvironment
 from reinforce.learning.trainers.ac_trainer import ActorCriticTrainer
 from reinforce.utils.buffers import ReplayBuffer

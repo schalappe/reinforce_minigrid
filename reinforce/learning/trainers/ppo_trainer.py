@@ -11,7 +11,7 @@ from loguru import logger
 from numpy import mean, ndarray
 
 from reinforce.agents.actor_critic import PPOAgent
-from reinforce.configs.models import PPOTrainerConfig
+from reinforce.configs.models.trainer import PPOTrainerConfig
 from reinforce.environments import BaseEnvironment
 from reinforce.learning.trainers.ac_trainer import ActorCriticTrainer
 from reinforce.utils.buffers import RolloutBuffer
