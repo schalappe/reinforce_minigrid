@@ -1,26 +1,25 @@
-base_config:
-  agent:
-    agent_type: PPO
-    embedding_size: 107
-    learning_rate: 3.384902344391131e-05
-    gae_lambda: 0.9066835236036991
-    clip_range: 0.29894168533934284
-    entropy_coef: 0.019678459791982864
-    value_coef: 0.49247479266784994
-    max_grad_norm: 0.5
-  environment:
-    use_image_obs: true
-  trainer:
-    trainer_type: PPOTrainer
-    n_steps: 3159
-    n_epochs: 19
-    batch_size: 32
-    max_total_steps: 1000000
-    max_steps_per_episode: 1000
-    eval_frequency: 1000
-    gamma: 0.99
-    num_eval_episodes: 10
-    log_frequency: 100
-    save_frequency: 2000
-    save_dir: outputs/models/ppo_final
-    save_path: outputs/models/ppo_final
+agent:
+  agent_type: PPO
+  embedding_size: 107
+  learning_rate: 3.384902344391131e-05
+  gae_lambda: 0.9066835236036991
+  clip_range: 0.29894168533934284
+  entropy_coef: 0.019678459791982864
+  value_coef: 0.49247479266784994
+  max_grad_norm: 0.5
+environment:
+  use_image_obs: true
+trainer:
+  trainer_type: PPOTrainer
+  n_steps: 3159
+  n_epochs: 19
+  batch_size: 32
+  max_total_steps: 1000000
+  max_steps_per_episode: 1000
+  eval_frequency: 1000
+  gamma: 0.99
+  num_eval_episodes: 10
+  log_frequency: 100
+  save_frequency: 2000
+  save_dir: outputs/models/ppo_final
+  save_path: outputs/models/ppo_final

@@ -1,23 +1,22 @@
-base_config:
-  agent:
-    agent_type: A2C
-    embedding_size: 120
-    learning_rate: 0.007858792303576312
-    entropy_coef: 0.025988745164565022
-    value_coef: 0.6794738331252752
-  environment:
-    use_image_obs: true
-  trainer:
-    trainer_type: A2CTrainer
-    max_episodes: 10000
-    max_steps_per_episode: 1000
-    buffer_capacity: 1000
-    update_frequency: 250
-    eval_frequency: 1000
-    num_eval_episodes: 10
-    batch_size: 128
-    gamma: 0.9
-    log_frequency: 100
-    save_frequency: 2000
-    save_dir: outputs/models/a2c_final
-    save_path: outputs/models/a2c_final
+agent:
+  agent_type: A2C
+  embedding_size: 120
+  learning_rate: 0.007858792303576312
+  entropy_coef: 0.025988745164565022
+  value_coef: 0.6794738331252752
+environment:
+  use_image_obs: true
+trainer:
+  trainer_type: A2CTrainer
+  max_episodes: 10000
+  max_steps_per_episode: 1000
+  buffer_capacity: 1000
+  update_frequency: 250
+  eval_frequency: 1000
+  num_eval_episodes: 10
+  batch_size: 128
+  gamma: 0.9
+  log_frequency: 100
+  save_frequency: 2000
+  save_dir: outputs/models/a2c_final
+  save_path: outputs/models/a2c_final

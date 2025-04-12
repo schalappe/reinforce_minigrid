@@ -33,7 +33,8 @@ def main(config_path: str):
 
     # ##: Load and Validate Experiment Configuration using Pydantic model.
     try:
-        experiment_config = ConfigManager.load_and_validate(config_path, ExperimentConfig)
+        experiment_config: ExperimentConfig = ConfigManager.load_and_validate(config_path, ExperimentConfig)
+        experiment_config.aim_experiment_name = f"final_{experiment_config.agent.agent_type.lower()}"
         logger.info("Experiment configuration loaded and validated successfully.")
         logger.info(
             f"Agent Type: {experiment_config.agent.agent_type}, Trainer Type: {experiment_config.trainer.trainer_type}"
