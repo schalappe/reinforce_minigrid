@@ -3,15 +3,16 @@
 Script to run a single reinforcement learning experiment using ExperimentRunner.
 """
 
-import argparse
-from pathlib import Path
 import sys
+from argparse import ArgumentParser
+from pathlib import Path
 
 from loguru import logger
 
-from reinforce.configs import ConfigManager
+from reinforce.configs.manager import ConfigManager
+from reinforce.configs.models import ExperimentConfig
 from reinforce.experiments import ExperimentRunner
-from reinforce.utils import setup_logger
+from reinforce.utils.management import setup_logger
 
 # Setup logger
 setup_logger()
@@ -30,10 +31,19 @@ def main(config_path: str):
 
     runner = ExperimentRunner()
 
-    # ##: Load Experiment Configuration.
-    experiment_config = ConfigManager.load_experiment_config(config_path)
-    logger.info("Experiment configuration loaded successfully.")
-    logger.info(f"Agent Type: {experiment_config.agent.agent_type}, Trainer Type: {experiment_config.trainer.trainer_type}")
+    # ##: Load and Validate Experiment Configuration using Pydantic model.
+    try:
+        experiment_config = ConfigManager.load_and_validate(config_path, ExperimentConfig)
+        logger.info("Experiment configuration loaded and validated successfully.")
+        logger.info(
+            f"Agent Type: {experiment_config.agent.agent_type}, Trainer Type: {experiment_config.trainer.trainer_type}"
+        )
+    except ValueError as e:
+        logger.error(f"Failed to load or validate configuration from {config_path}: {e}")
+        sys.exit(1)
+    except FileNotFoundError:
+        logger.error(f"Configuration file not found: {config_path}")
+        sys.exit(1)
 
     # ##: Run the Experiment.
     logger.info("Running experiment...")
@@ -50,7 +60,7 @@ def main(config_path: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run a single RL experiment using a config file.")
+    parser = ArgumentParser(description="Run a single RL experiment using a config file.")
     parser.add_argument(
         "--config",
         type=str,

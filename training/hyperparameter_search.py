@@ -6,15 +6,15 @@ This script loads a search configuration from a YAML file and runs an Optuna-bas
 search for the specified agent and trainer.
 """
 
-from argparse import ArgumentParser
 import os
+from argparse import ArgumentParser
 from pathlib import Path
 
 from loguru import logger
 
-from reinforce.configs import ConfigManager
+from reinforce.configs.manager.reader import YamlReader
 from reinforce.experiments import HyperparameterSearch
-from reinforce.utils import setup_logger
+from reinforce.utils.management import setup_logger
 
 setup_logger()
 
@@ -30,9 +30,9 @@ def main(search_config_path: str, n_trials: int):
     n_trials: int
         Number of trials to run.
     """
-    config_manager = ConfigManager()
+    # Load search config directly using YamlReader
     try:
-        search_config = config_manager.load_config(search_config_path)
+        search_config = YamlReader().read(Path(search_config_path))
         base_config = search_config.get("base_config", {})
         agent_type = base_config.get("agent", {}).get("agent_type", "unknown_agent")
         logger.info(f"Loaded search configuration for agent: {agent_type}")
@@ -59,7 +59,7 @@ def main(search_config_path: str, n_trials: int):
         logger.info(f"\n{agent_type} Hyperparameter Search Results:")
         logger.info(f"Number of completed trials: {results.get('num_completed_trials', 'N/A')}")
         logger.info(f"Best trial number: {results.get('best_trial_number', 'N/A')}")
-        best_reward = results.get('best_mean_reward')
+        best_reward = results.get("best_mean_reward")
         if best_reward is not None:
             logger.info(f"Best mean reward: {best_reward:.4f}")
         else:
@@ -94,6 +94,8 @@ if __name__ == "__main__":
     if not os.path.exists(args.config):
         logger.error(f"Configuration file not found: {args.config}")
         logger.info("Please provide a valid path to a search configuration YAML file.")
-        logger.info("Example: python examples/hyperparameter_search.py --config examples/configs/a2c_search.yaml --trials 10")
+        logger.info(
+            "Example: python examples/hyperparameter_search.py --config examples/configs/a2c_search.yaml --trials 10"
+        )
     else:
         main(args.config, args.trials)
