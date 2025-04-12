@@ -8,7 +8,9 @@ from typing import Union
 from reinforce.agents.actor_critic import A2CAgent, PPOAgent
 from reinforce.configs.models.trainer import A2CTrainerConfig, PPOTrainerConfig
 from reinforce.environments import BaseEnvironment
-from reinforce.learning.trainers import A2CTrainer, BaseTrainer, PPOTrainer
+from reinforce.learning.trainers.a2c_trainer import A2CTrainer
+from reinforce.learning.trainers.base_trainer import BaseTrainer
+from reinforce.learning.trainers.ppo_trainer import PPOTrainer
 from reinforce.utils.management import AimTracker
 
 Agent = Union[A2CAgent, PPOAgent]
