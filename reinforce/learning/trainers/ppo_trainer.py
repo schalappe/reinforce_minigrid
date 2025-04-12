@@ -51,8 +51,8 @@ class PPOTrainer(ActorCriticTrainer):
         # ##: Initialize the Rollout Buffer (Specific to PPOTrainer).
         self.rollout_buffer = RolloutBuffer(
             buffer_size=self.config.n_steps,
-            observation_shape=self.environment.observation_space.shape,
-            action_shape=self.environment.action_space.shape,
+            observation_shape=self.environment.observation_space["image"].shape,
+            action_shape=self.environment.action_space.n,
             gamma=self.config.gamma,
             gae_lambda=self.agent.hyperparameters.gae_lambda,
         )
