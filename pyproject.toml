@@ -27,6 +27,7 @@ aim = "^3.28.0"
 loguru = "^0.7.3"
 pydantic = "^2.11.2"
 tensorflow-probability = {version = "^0.25.0", extras = ["tf"]}
+optuna-dashboard = "^0.18.0"
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.12.0"

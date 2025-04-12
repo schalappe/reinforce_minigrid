@@ -1,5 +1,5 @@
 # Default configuration for episode-based trainer
-trainer_type: EpisodeTrainer
+trainer_type: A2CTrainer
 max_episodes: 10000
 max_steps_per_episode: 100
 update_frequency: 1  # Update agent after each step
