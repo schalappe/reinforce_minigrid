@@ -10,7 +10,7 @@ from loguru import logger
 
 from reinforce.agents import BaseAgent
 from reinforce.environments import BaseEnvironment
-from reinforce.utils.logger import setup_logger
+from reinforce.utils.management import setup_logger
 
 setup_logger()
 

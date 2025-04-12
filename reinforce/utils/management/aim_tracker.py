@@ -15,7 +15,7 @@ from aim.sdk.objects import Text as AimText
 from aim.sdk.run import Run
 from loguru import logger
 
-from reinforce.utils.logger.logging_setup import setup_logger
+from reinforce.utils.management.logging_setup import setup_logger
 
 setup_logger()
 

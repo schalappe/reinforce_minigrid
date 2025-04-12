@@ -9,7 +9,7 @@ from typing import Any, Dict, Union
 from loguru import logger
 
 from reinforce.agents import BaseAgent
-from reinforce.utils.logger import AimTracker, setup_logger
+from reinforce.utils.management import AimTracker, setup_logger
 
 setup_logger()
 

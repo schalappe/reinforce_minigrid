@@ -20,7 +20,7 @@ from reinforce.configs.models import A2CTrainerConfig, PPOTrainerConfig
 from reinforce.environments import BaseEnvironment
 from reinforce.learning.evaluation import evaluate_agent
 from reinforce.learning.trainers.base_trainer import BaseTrainer
-from reinforce.utils.logger import AimTracker
+from reinforce.utils.management import AimTracker
 from reinforce.utils.persistence import save_checkpoint
 
 ACAgent = Union[A2CAgent, PPOAgent]

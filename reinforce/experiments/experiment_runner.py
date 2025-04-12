@@ -19,7 +19,7 @@ from reinforce.configs.models import ExperimentConfig
 from reinforce.environments.factory import EnvironmentFactory
 from reinforce.learning.trainers import BaseTrainer
 from reinforce.learning.trainers.factory import TrainerFactory
-from reinforce.utils.logger import AimTracker, setup_logger
+from reinforce.utils.management import AimTracker, setup_logger
 
 setup_logger()
 

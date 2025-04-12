@@ -17,7 +17,7 @@ from optuna import Trial, TrialPruned
 from reinforce.configs.manager.reader import YamlReader
 from reinforce.configs.models import ExperimentConfig
 from reinforce.experiments.experiment_runner import ExperimentRunner
-from reinforce.utils.logger import AimTracker, OptunaManager, setup_logger
+from reinforce.utils.management import AimTracker, OptunaManager, setup_logger
 
 setup_logger()
 

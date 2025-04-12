@@ -15,7 +15,7 @@ from reinforce.configs.models import PPOTrainerConfig
 from reinforce.environments import BaseEnvironment
 from reinforce.learning.trainers.ac_trainer import ActorCriticTrainer
 from reinforce.utils.buffers import RolloutBuffer
-from reinforce.utils.logger import AimTracker, setup_logger
+from reinforce.utils.management import AimTracker, setup_logger
 
 setup_logger()
 

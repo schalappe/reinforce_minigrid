@@ -17,7 +17,7 @@ from optuna.exceptions import TrialPruned
 from optuna.pruners import MedianPruner
 from optuna.trial import TrialState
 
-from reinforce.utils.logger.logging_setup import setup_logger
+from reinforce.utils.management.logging_setup import setup_logger
 
 setup_logger()
 

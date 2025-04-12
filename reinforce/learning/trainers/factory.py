@@ -9,7 +9,7 @@ from reinforce.agents.actor_critic import A2CAgent, PPOAgent
 from reinforce.configs.models import TrainerConfigUnion
 from reinforce.environments import BaseEnvironment
 from reinforce.learning.trainers import A2CTrainer, BaseTrainer, PPOTrainer
-from reinforce.utils.logger import AimTracker
+from reinforce.utils.management import AimTracker
 
 Agent = Union[A2CAgent, PPOAgent]
 

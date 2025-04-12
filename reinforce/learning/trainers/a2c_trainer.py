@@ -14,7 +14,7 @@ from reinforce.configs.models import A2CTrainerConfig
 from reinforce.environments import BaseEnvironment
 from reinforce.learning.trainers.ac_trainer import ActorCriticTrainer
 from reinforce.utils.buffers import ReplayBuffer
-from reinforce.utils.logger import AimTracker, setup_logger
+from reinforce.utils.management import AimTracker, setup_logger
 from reinforce.utils.preprocessing import preprocess_observation
 
 setup_logger()

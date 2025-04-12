@@ -9,7 +9,7 @@ import numpy as np
 import tensorflow as tf
 from loguru import logger
 
-from reinforce.utils.logger import setup_logger
+from reinforce.utils.management import setup_logger
 from reinforce.utils.preprocessing import preprocess_observation
 
 setup_logger()
