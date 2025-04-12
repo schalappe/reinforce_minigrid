@@ -9,8 +9,8 @@ from .agent import A2CConfig, AgentConfig, PPOConfig
 from .environment import EnvironmentConfig
 from .experiment import AgentConfigUnion, ExperimentConfig, TrainerConfigUnion
 from .trainer import (
+    A2CTrainerConfig,
     DistributedTrainerConfig,
-    EpisodeTrainerConfig,
     PPOTrainerConfig,
     TrainerConfig,
 )
@@ -20,7 +20,7 @@ __all__ = [
     "A2CConfig",
     "PPOConfig",
     "TrainerConfig",
-    "EpisodeTrainerConfig",
+    "A2CTrainerConfig",
     "DistributedTrainerConfig",
     "PPOTrainerConfig",
     "EnvironmentConfig",

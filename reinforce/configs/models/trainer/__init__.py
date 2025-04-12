@@ -3,8 +3,8 @@
 Trainer configuration models.
 """
 
-from .episode_trainer_config import EpisodeTrainerConfig
+from .a2c_trainer_config import A2CTrainerConfig
 from .ppo_trainer_config import PPOTrainerConfig
 from .trainer_config import TrainerConfig
 
-__all__ = ["TrainerConfig", "EpisodeTrainerConfig", "PPOTrainerConfig"]
+__all__ = ["TrainerConfig", "A2CTrainerConfig", "PPOTrainerConfig"]

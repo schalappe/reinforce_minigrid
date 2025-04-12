@@ -24,7 +24,7 @@ from reinforce.configs.models import (
 )
 from reinforce.environments import BaseEnvironment
 from reinforce.environments.minigrid import MazeEnvironment
-from reinforce.learning.trainers import BaseTrainer, EpisodeTrainer, PPOTrainer
+from reinforce.learning.trainers import A2CTrainer, BaseTrainer, PPOTrainer
 from reinforce.utils.logger import AimTracker, setup_logger
 
 setup_logger()
@@ -128,7 +128,7 @@ class ExperimentRunner:
             If the trainer type specified in the config is not supported.
         """
         if trainer_config.trainer_type == "EpisodeTrainer":
-            return EpisodeTrainer(agent=agent, environment=environment, config=trainer_config, tracker=tracker)
+            return A2CTrainer(agent=agent, environment=environment, config=trainer_config, tracker=tracker)
 
         if trainer_config.trainer_type == "PPOTrainer":
             return PPOTrainer(agent=agent, environment=environment, config=trainer_config, tracker=tracker)

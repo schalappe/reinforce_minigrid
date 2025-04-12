@@ -13,12 +13,12 @@ from pydantic import BaseModel, Field
 # ##: Import from sibling subpackages
 from ..agent import A2CConfig, PPOConfig
 from ..environment import EnvironmentConfig
-from ..trainer import DistributedTrainerConfig, EpisodeTrainerConfig, PPOTrainerConfig
+from ..trainer import A2CTrainerConfig, DistributedTrainerConfig, PPOTrainerConfig
 
 # ##: Define discriminated unions for agent and trainer configs.
 AgentConfigUnion = Annotated[Union[A2CConfig, PPOConfig], Field(discriminator="agent_type")]
 TrainerConfigUnion = Annotated[
-    Union[EpisodeTrainerConfig, DistributedTrainerConfig, PPOTrainerConfig], Field(discriminator="trainer_type")
+    Union[A2CTrainerConfig, DistributedTrainerConfig, PPOTrainerConfig], Field(discriminator="trainer_type")
 ]
 
 

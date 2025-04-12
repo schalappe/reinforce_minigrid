@@ -13,7 +13,7 @@ from pydantic import Field
 from .trainer_config import TrainerConfig
 
 
-class EpisodeTrainerConfig(TrainerConfig):
+class A2CTrainerConfig(TrainerConfig):
     """
     Pydantic model for episode trainer configuration.
 
@@ -22,7 +22,7 @@ class EpisodeTrainerConfig(TrainerConfig):
 
     Attributes
     ----------
-    trainer_type : Literal["EpisodeTrainer"]
+    trainer_type : Literal["A2CTrainer"]
         The type of trainer, fixed as "EpisodeTrainer" for this configuration.
     max_episodes : int
         Maximum number of episodes to train for. Must be at least 1.
@@ -36,7 +36,7 @@ class EpisodeTrainerConfig(TrainerConfig):
     This class inherits all attributes from TrainerConfig and adds episode-specific configuration parameters.
     """
 
-    trainer_type: Literal["EpisodeTrainer"] = "EpisodeTrainer"
+    trainer_type: Literal["A2CTrainer"] = "A2CTrainer"
     max_episodes: int = Field(10000, ge=1, description="Maximum number of episodes to train for")
     update_frequency: int = Field(1, ge=1, description="Number of steps between agent updates")
     buffer_capacity: int = Field(10000, ge=1, description="Capacity of the replay buffer")

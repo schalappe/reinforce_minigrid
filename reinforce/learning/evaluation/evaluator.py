@@ -48,7 +48,7 @@ def evaluate_agent(
         episode_steps = 0
 
         # ##: Run one evaluation episode.
-        for step_num in range(max_steps_per_episode):
+        for _ in range(max_steps_per_episode):
             try:
                 action, _ = agent.act(observation, training=False)
             except Exception as e:

@@ -182,7 +182,6 @@ class RolloutBuffer:
             logger.info("Advantages/Returns seem uncomputed. Call compute_returns_and_advantages first.")
 
         # ##: Preprocess observations before creating tensor.
-        # ##: Handle potential None values if buffer wasn't perfectly filled (shouldn't happen with proper trainer logic).
         valid_observations = [obs for obs in self.observations if obs is not None]
         if len(valid_observations) != self.buffer_size:
             logger.warning(
@@ -201,7 +200,7 @@ class RolloutBuffer:
             "advantages": tf.convert_to_tensor(self.advantages[indices], dtype=tf.float32),
             "returns": tf.convert_to_tensor(self.returns[indices], dtype=tf.float32),
             "log_probs_old": tf.convert_to_tensor(self.log_probs[indices], dtype=tf.float32),
-            "values_old": tf.convert_to_tensor(self.values[indices], dtype=tf.float32),  # Include old values
+            "values_old": tf.convert_to_tensor(self.values[indices], dtype=tf.float32),
         }
         return batch
 
