@@ -58,10 +58,14 @@ class PPOConfig(AgentConfig):
         """
         Pydantic configuration settings for the `PPOConfig` class.
 
-        Attributes:
-            allow_population_by_field_name (bool): Allows populating model fields by both field name and alias.
-            validate_assignment (bool): Enables validation on attribute assignment.
-            frozen (bool): Makes the model immutable after creation.
+        Attributes
+        ----------
+        allow_population_by_field_name: bool
+            Allows populating model fields by both field name and alias.
+        validate_assignment: bool
+            Enables validation on attribute assignment.
+        frozen: bool
+            Makes the model immutable after creation.
         """
 
         allow_population_by_field_name = True
