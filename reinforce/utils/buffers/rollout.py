@@ -9,7 +9,7 @@ import numpy as np
 import tensorflow as tf
 from loguru import logger
 
-from reinforce.utils.logging_setup import setup_logger
+from reinforce.utils.logger import setup_logger
 from reinforce.utils.preprocessing import preprocess_observation
 
 setup_logger()
@@ -243,9 +243,23 @@ class RolloutBuffer:
         self.full = False
 
     def is_full(self) -> bool:
-        """Check if the buffer has reached its capacity."""
+        """
+        Check if the buffer has reached its capacity.
+
+        Returns
+        -------
+        bool
+            True if the buffer is full, False otherwise.
+        """
         return self.full
 
     def size(self) -> int:
-        """Return the current number of elements in the buffer."""
+        """
+        Return the current number of elements in the buffer.
+
+        Returns
+        -------
+        int
+            The number of elements in the buffer.
+        """
         return self.ptr

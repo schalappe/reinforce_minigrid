@@ -12,7 +12,7 @@ from numpy import ndarray, ones
 from numpy import sum as np_sum
 from numpy.random import choice
 
-from reinforce.utils.buffers.base import ReplayBuffer
+from reinforce.utils.buffers.buffer import ReplayBuffer
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):

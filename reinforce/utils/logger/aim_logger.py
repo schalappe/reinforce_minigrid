@@ -7,6 +7,8 @@ It simplifies initializing runs, logging various data types (parameters, metrics
 managing the run lifecycle.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -15,35 +17,18 @@ from aim.sdk.objects import Text as AimText
 from aim.sdk.run import Run
 from loguru import logger
 
-from reinforce.utils.logging_setup import setup_logger
+from reinforce.utils.logger.base_logger import BaseLogger
+from reinforce.utils.logger.logging_setup import setup_logger
 
 setup_logger()
 
 
-class AimLogger:
+class AimLogger(BaseLogger):
     """
-    A wrapper class for AIM experiment tracking, promoting DRY principles.
+    An implementation of BaseLogger using AIM experiment tracking.
 
     Handles AIM Run initialization, logging of hyperparameters, metrics, artifacts (metadata), images, and text, along
     with managing the run lifecycle using a context manager pattern.
-
-    Examples
-    --------
-    >>> logger_config = {
-    ...     "experiment_name": "my_rl_experiment",
-    ...     "run_name": "a2c_run_1",
-    ...     "tags": ["a2c", "baseline"],
-    ...     "repo_path": ".aim_results"
-    ... }
-    >>> with AimLogger(**logger_config) as aim_log:
-    ...     if aim_log.run: # Check if run initialized successfully
-    ...         hparams = {"learning_rate": 0.001, "gamma": 0.99}
-    ...         aim_log.log_params(hparams, prefix="agent")
-    ...         for step in range(100):
-    ...             metrics = {"reward": step * 0.1, "loss": 1.0 / (step + 1)}
-    ...             aim_log.log_metrics(metrics, step=step)
-    ...         # Log final artifact metadata
-    ...         aim_log.log_artifact("model_weights", name="final_model", path="models/final.pt")
     """
 
     def __init__(self, experiment_name: str, tags: Optional[List[str]] = None, repo_path: Union[str, Path] = ".aim"):
@@ -69,7 +54,7 @@ class AimLogger:
 
         self._initialize_run()
 
-    def __enter__(self) -> "AimLogger":
+    def __enter__(self) -> AimLogger:
         """Enter the runtime context related to this object."""
         return self
 
@@ -77,7 +62,7 @@ class AimLogger:
         """Exit the runtime context and close the AIM run."""
         self.close()
 
-    def _initialize_run(self) -> None:
+    def _initialize_run(self):
         """Initialize the AIM Run object and set system params."""
         if self._run:
             logger.warning(f"AIM Run ({self.run_hash}) already initialized. Skipping re-initialization.")
@@ -131,12 +116,26 @@ class AimLogger:
 
     @property
     def run(self) -> Optional[Run]:
-        """Get the underlying AIM Run object. Returns None if initialization failed."""
+        """
+        Get the underlying AIM Run object. Returns None if initialization failed.
+
+        Returns
+        -------
+        Run | None
+            The AIM Run object or None if not initialized.
+        """
         return self._run
 
     @property
     def run_hash(self) -> Optional[str]:
-        """Get the hash of the current AIM Run. Returns None if not initialized."""
+        """
+        Get the hash of the current AIM Run. Returns None if not initialized.
+
+        Returns
+        -------
+        str | None
+            The hash of the AIM Run or None if not initialized.
+        """
         return self._run.hash if self._run else None
 
     def log_params(self, params: Dict[str, Any], prefix: Optional[str] = None) -> None:
@@ -152,11 +151,6 @@ class AimLogger:
         prefix : Optional[str], optional
             If provided, keys in the params dictionary will be prefixed with f"{prefix}.".
             Defaults to None.
-
-        Examples
-        --------
-        >>> AimLogger.log_params({"learning_rate": 0.01, "optimizer": "Adam"})
-        >>> AimLogger.log_params({"gamma": 0.99, "lambda": 0.95}, prefix="ppo")
         """
         if prefix:
             processed_params = {f"{prefix}.{k}": v for k, v in params.items()}
@@ -198,11 +192,6 @@ class AimLogger:
             The epoch number for the metric. Defaults to None.
         context : Optional[Dict[str, Any]], optional
             Additional context for the metric (e.g., {'subset': 'train'}). Defaults to None.
-
-        Examples
-        --------
-        >>> AimLogger.log_metric("train_loss", 0.5, step=100, context={"subset": "train"})
-        >>> AimLogger.log_metric("val_accuracy", 0.95, epoch=5, context={"subset": "validation"})
         """
         op_desc = f"logging metric '{name}' (Step: {step}, Epoch: {epoch})"
         self._safe_run_operation(
@@ -229,11 +218,6 @@ class AimLogger:
             The epoch number for all metrics in the dictionary. Defaults to None.
         context : Optional[Dict[str, Any]], optional
             Additional context for all metrics. Defaults to None.
-
-        Examples
-        --------
-        >>> metrics_dict = {"reward": 10.5, "steps_per_episode": 55}
-        >>> AimLogger.log_metrics(metrics_dict, step=500, context={"env": "CartPole-v1"})
         """
         base_context = context or {}
         for name, value in metrics.items():
@@ -275,54 +259,6 @@ class AimLogger:
         op_desc = f"logging artifact info for '{name}'"
         self._safe_run_operation(
             lambda key, value: self._run.set(key, value, strict=False), op_desc, f"artifacts/{name}", artifact_info
-        )
-
-    def log_image(
-        self,
-        image_data: Any,
-        name: str,
-        step: Optional[int] = None,
-        *,
-        epoch: Optional[int] = None,
-        context: Optional[Dict[str, Any]] = None,
-        caption: Optional[str] = None,
-    ) -> None:
-        """
-        Log an image.
-
-        The image data should be in a format supported by `aim.Image`
-        (e.g., PIL Image, NumPy array, PyTorch tensor).
-
-        Parameters
-        ----------
-        image_data : Any
-            The image data to log.
-        name : str
-            Name for the image sequence (e.g., 'environment_observations').
-        step : Optional[int], optional
-            The step number for the image. Defaults to None.
-        epoch : Optional[int], optional
-            The epoch number for the image. Defaults to None.
-        context : Optional[Dict[str, Any]], optional
-            Additional context for the image. Defaults to None.
-        caption : Optional[str], optional
-            Caption for the image. Defaults to None.
-
-        Examples
-        --------
-        >>> import numpy as np
-        >>> random_image = np.random.randint(0, 256, size=(100, 100, 3), dtype=np.uint8)
-        >>> AimLogger.log_image(random_image, "random_noise", step=50, caption="Random RGB noise")
-        """
-        try:
-            aim_image = AimImage(image_data, caption=caption)
-        except Exception as exc:
-            logger.error(f"Failed to create aim.Image object for '{name}': {exc}. Skipping log_image.")
-            return
-
-        op_desc = f"logging image '{name}' (Step: {step}, Epoch: {epoch})"
-        self._safe_run_operation(
-            self._run.track, op_desc, aim_image, name=name, step=step, epoch=epoch, context=context or {}
         )
 
     def log_text(

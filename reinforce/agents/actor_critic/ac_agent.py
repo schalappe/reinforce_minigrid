@@ -4,17 +4,17 @@ Base class for Actor-Critic agents like A2C and PPO.
 """
 
 from abc import abstractmethod
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Tuple, Union
 
 from keras import Model, optimizers
 from numpy import ndarray
 
 from reinforce.agents.base_agent import BaseAgent
-from reinforce.agents.persistence import AgentPersistence, KerasFilePersistence
-from reinforce.configs.models.agent import A2CConfig, AgentConfig, PPOConfig
+from reinforce.configs.models.agent import A2CConfig, PPOConfig
+from reinforce.utils.persistence import load_model, save_model
 
 # ##: Type alias for hyperparameters, now using the base AgentConfig
-HyperparameterConfig = Union[A2CConfig, PPOConfig, AgentConfig]
+HyperparameterConfig = Union[A2CConfig, PPOConfig]
 
 
 class ActorCriticAgent(BaseAgent):
@@ -26,13 +26,7 @@ class ActorCriticAgent(BaseAgent):
     learning and action selection logic.
     """
 
-    def __init__(
-        self,
-        model: Model,
-        agent_name: str,
-        hyperparameters: HyperparameterConfig,
-        persistence_handler: Optional[AgentPersistence] = None,
-    ):
+    def __init__(self, model: Model, agent_name: str, hyperparameters: HyperparameterConfig):
         """
         Initialize the Base Actor-Critic agent with injected model and persistence handler.
 
@@ -44,16 +38,10 @@ class ActorCriticAgent(BaseAgent):
             The specific name of the agent (e.g., "A2CAgent", "PPOAgent").
         hyperparameters : HyperparameterConfig
             Pydantic model containing hyperparameters (e.g., A2CConfig, PPOConfig).
-        persistence_handler : AgentPersistence, optional
-            An instance of AgentPersistence to handle saving/loading.
-            If None, defaults to `KerasFilePersistence`, by default None.
         """
         self._name = agent_name
-        self.hyperparameters = hyperparameters
-
-        # ##: Inject model and persistence handler
         self._model = model
-        self._persistence_handler = persistence_handler or KerasFilePersistence()
+        self.hyperparameters = hyperparameters
 
         # ##: Common optimizer setup.
         self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters.learning_rate)
@@ -68,7 +56,7 @@ class ActorCriticAgent(BaseAgent):
             Directory path to save the agent's state.
         """
         hyperparams = self.hyperparameters.model_dump()
-        self._persistence_handler.save(path=path, agent_name=self.name, model=self._model, hyperparameters=hyperparams)
+        save_model(path=path, agent_name=self.name, model=self._model, hyperparameters=hyperparams)
 
     def load(self, path: str) -> None:
         """
@@ -79,7 +67,7 @@ class ActorCriticAgent(BaseAgent):
         path : str
             Directory path to load the agent's state from.
         """
-        loaded_model, loaded_hyperparams_dict = self._persistence_handler.load(path=path, agent_name=self.name)
+        loaded_model, loaded_hyperparams_dict = load_model(path=path, agent_name=self.name)
 
         # ##: Assign the loaded model.
         self._model = loaded_model

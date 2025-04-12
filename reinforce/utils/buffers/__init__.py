@@ -3,8 +3,8 @@
 Replay buffer implementations for reinforcement learning.
 """
 
-from .base import ReplayBuffer
+from .buffer import ReplayBuffer
 from .prioritized import PrioritizedReplayBuffer
-from .rollout_buffer import RolloutBuffer
+from .rollout import RolloutBuffer
 
 __all__ = ["ReplayBuffer", "PrioritizedReplayBuffer", "RolloutBuffer"]

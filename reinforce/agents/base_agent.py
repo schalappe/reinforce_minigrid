@@ -9,6 +9,8 @@ from typing import Any, Dict, Optional, Tuple
 import tensorflow as tf
 from numpy import ndarray
 
+from reinforce.configs.models.agent import AgentConfig
+
 
 class BaseAgent(ABC):
     """
@@ -17,6 +19,8 @@ class BaseAgent(ABC):
     This abstract class defines the interface that all agent implementations must adhere to.
     It provides a standard API for agent interaction with environments, training, saving, and loading.
     """
+
+    hyperparameters: AgentConfig
 
     @abstractmethod
     def act(self, observation: ndarray, training: bool = True) -> Tuple[int, Dict[str, Any]]:
