@@ -10,7 +10,7 @@ from pathlib import Path
 from loguru import logger
 
 from reinforce.configs.manager import ConfigManager
-from reinforce.configs.models import ExperimentConfig
+from reinforce.configs.models.experiment import ExperimentConfig
 from reinforce.experiments import ExperimentRunner
 from reinforce.utils.management import setup_logger
 
