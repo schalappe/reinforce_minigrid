@@ -230,13 +230,7 @@ class AimTracker:
         context : Optional[Dict[str, Any]], optional
             Additional context for the text. Defaults to None.
         """
-        try:
-            aim_text = AimText(text_data)
-        except Exception as exc:
-            logger.error(f"Failed to create aim.Text object for '{name}': {exc}. Skipping log_text.")
-            return
-
-        self._run.track(aim_text, name=name, step=step, epoch=epoch, context=context or {})
+        self._run.track(AimText(text_data), name=name, step=step, epoch=epoch, context=context or {})
 
     def close(self) -> None:
         """
