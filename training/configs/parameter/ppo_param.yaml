@@ -7,6 +7,7 @@ agent:
   entropy_coef: 0.019678459791982864
   value_coef: 0.49247479266784994
   max_grad_norm: 0.5
+  gamma: 0.99
 environment:
   use_image_obs: true
 trainer:
@@ -17,7 +18,6 @@ trainer:
   max_total_steps: 1000000
   max_steps_per_episode: 1000
   eval_frequency: 1000
-  gamma: 0.99
   num_eval_episodes: 10
   log_frequency: 100
   save_frequency: 2000

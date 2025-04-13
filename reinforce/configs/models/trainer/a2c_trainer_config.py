@@ -41,3 +41,14 @@ class A2CTrainerConfig(TrainerConfig):
     update_frequency: int = Field(1, ge=1, description="Number of steps between agent updates")
     buffer_capacity: int = Field(10000, ge=1, description="Capacity of the replay buffer")
     batch_size: int = Field(64, ge=1, description="Batch size for sampling from the replay buffer")
+
+    def get_max_steps(self) -> int:
+        """
+        Get the maximum number of steps for the full training run.
+
+        Returns
+        -------
+        int
+            Maximum number of steps for the full training.
+        """
+        return self.max_episodes * self.max_steps_per_episode

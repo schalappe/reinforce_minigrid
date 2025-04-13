@@ -6,6 +6,7 @@ base_config:
     learning_rate: 0.001
     entropy_coef: 0.01
     value_coef: 0.5
+    discount_factor: 0.99
   environment:
     use_image_obs: true
   trainer:
@@ -15,7 +16,6 @@ base_config:
     update_frequency: 10
     eval_frequency: 20
     num_eval_episodes: 5
-    gamma: 0.99
     log_frequency: 10
     log_env_image_frequency: 10000
     save_frequency: 100
@@ -41,3 +41,9 @@ hyperparameters:
     type: float
     low: 0.25
     high: 0.75
+  agent.discount_factor:
+    type: categorical
+    values:
+      - 0.95
+      - 0.99
+      - 0.995

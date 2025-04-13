@@ -3,7 +3,7 @@
 Rollout buffer for on-policy algorithms like PPO.
 """
 
-from typing import Dict, Generator
+from typing import Dict, Generator, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -27,8 +27,8 @@ class RolloutBuffer:
     def __init__(
         self,
         buffer_size: int,
-        observation_shape: tuple,
-        action_shape: tuple,
+        observation_shape: Tuple[int, ...],
+        action_shape: Tuple[int, ...],
         gamma: float = 0.99,
         gae_lambda: float = 0.95,
     ):

@@ -52,7 +52,7 @@ class A2CTrainer(ActorCriticTrainer):
         self.buffer = ReplayBuffer(
             capacity=self.config.buffer_capacity,
             observation_shape=self.environment.observation_space["image"].shape,
-            action_shape=self.environment.action_space.n,
+            action_shape=(),
         )
         logger.info(f"Initialized Replay Buffer with capacity {self.config.buffer_capacity}")
 
