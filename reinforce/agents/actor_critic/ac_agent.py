@@ -6,12 +6,14 @@ Base class for Actor-Critic agents like A2C and PPO.
 from abc import abstractmethod
 from typing import Any, Dict, Tuple, Union
 
+import tensorflow as tf
 from keras import Model, optimizers
 from numpy import ndarray
 
 from reinforce.agents.base_agent import BaseAgent
 from reinforce.configs.models.agent import A2CConfig, PPOConfig
 from reinforce.utils.persistence import load_model, save_model
+from reinforce.utils.preprocessing import preprocess_observation
 
 
 class ActorCriticAgent(BaseAgent):
@@ -40,8 +42,18 @@ class ActorCriticAgent(BaseAgent):
         self._model = model
         self.hyperparameters = hyperparameters
 
-        # ##: Common optimizer setup.
-        self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters.learning_rate)
+        # ##: Initialize optimizer with optional LR scheduling.
+        if self.hyperparameters.lr_schedule_enabled:
+            initial_learning_rate = self.hyperparameters.learning_rate
+            lr_schedule = optimizers.schedules.PolynomialDecay(
+                initial_learning_rate,
+                decay_steps=self.hyperparameters.max_total_steps,
+                end_learning_rate=initial_learning_rate * self.hyperparameters.lr_decay_factor,
+                power=1.0,
+            )
+            self._optimizer = optimizers.Adam(learning_rate=lr_schedule)
+        else:
+            self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters.learning_rate)
 
     def save(self, path: str) -> None:
         """
@@ -93,6 +105,60 @@ class ActorCriticAgent(BaseAgent):
             The Keras model.
         """
         return self._model
+
+    @classmethod
+    def _preprocess_observation(cls, observation: ndarray) -> tf.Tensor:
+        """
+        Preprocess the observation before feeding it to the model.
+
+        Parameters
+        ----------
+        observation : np.ndarray
+            The raw observation from the environment.
+
+        Returns
+        -------
+        tf.Tensor
+            The preprocessed observation tensor.
+        """
+        processed_observation = preprocess_observation(observation)
+        if len(processed_observation.shape) == 3:
+            processed_observation = tf.expand_dims(processed_observation, axis=0)
+        return processed_observation
+
+    def _forward_pass(self, observation: tf.Tensor, training: bool = True) -> Tuple[tf.Tensor, tf.Tensor]:
+        """
+        Perform a forward pass through the model.
+
+        Parameters
+        ----------
+        observation : tf.Tensor
+            The preprocessed observation tensor.
+        training : bool, optional
+            Whether the model is in training mode, by default ``True``.
+
+        Returns
+        -------
+        Tuple[tf.Tensor, tf.Tensor]
+            Action logits and value estimate from the model.
+        """
+        return self._model(observation, training=training)
+
+    def _apply_gradients(self, tape: tf.GradientTape, loss: tf.Tensor) -> None:
+        """
+        Calculate and apply gradients.
+
+        Parameters
+        ----------
+        tape : tf.GradientTape
+            The gradient tape recording the operations.
+        loss : tf.Tensor
+            The loss tensor to compute gradients for.
+        """
+        gradients = tape.gradient(loss, self._model.trainable_variables)
+        if self.hyperparameters.max_grad_norm is not None:
+            gradients, _ = tf.clip_by_global_norm(gradients, self.hyperparameters.max_grad_norm)
+        self._optimizer.apply_gradients(zip(gradients, self._model.trainable_variables))
 
     @abstractmethod
     def act(self, observation: ndarray, training: bool = True) -> Tuple[int, Dict[str, Any]]:

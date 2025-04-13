@@ -6,12 +6,11 @@ A2C Agent implementation.
 from typing import Any, Dict, Tuple
 
 import tensorflow as tf
-from keras import Model, optimizers
+from keras import Model
 from numpy import ndarray
 
 from reinforce.agents.actor_critic.ac_agent import ActorCriticAgent
 from reinforce.configs.models.agent import A2CConfig
-from reinforce.utils.preprocessing import preprocess_observation
 
 
 class A2CAgent(ActorCriticAgent):
@@ -38,17 +37,6 @@ class A2CAgent(ActorCriticAgent):
         # ##: Refine the type hint for hyperparameters specific to A2C.
         self.hyperparameters: A2CConfig = hyperparameters
 
-        # ##: Initialize optimizer with optional LR scheduling.
-        if self.hyperparameters.lr_schedule_enabled:
-            initial_learning_rate = self.hyperparameters.learning_rate
-            lr_schedule = optimizers.schedules.PolynomialDecay(
-                initial_learning_rate,
-                decay_steps=self.hyperparameters.max_total_steps,
-                end_learning_rate=initial_learning_rate * self.hyperparameters.lr_decay_factor,
-                power=1.0,
-            )
-            self._optimizer = optimizers.Adam(learning_rate=lr_schedule)
-
     def act(self, observation: ndarray, training: bool = True) -> Tuple[int, Dict[str, Any]]:
         """
         Select an action based on the current observation.
@@ -65,11 +53,9 @@ class A2CAgent(ActorCriticAgent):
         Tuple[int, Dict[str, Any]]
             The selected action and additional information about the decision.
         """
-        observation = preprocess_observation(observation)
-        if len(observation.shape) == 3:
-            observation = tf.expand_dims(observation, axis=0)
-
-        action_logits, value = self._model(observation)
+        # ##: Preprocess observation and perform forward pass using base class methods.
+        processed_observation = self._preprocess_observation(observation)
+        action_logits, value = self._forward_pass(processed_observation, training=training)
 
         if not training:
             action = tf.argmax(action_logits[0]).numpy()
@@ -194,8 +180,8 @@ class A2CAgent(ActorCriticAgent):
             Dictionary of training metrics.
         """
         with tf.GradientTape() as tape:
-            # ##: Forward pass.
-            action_logits, values = self._model(observations)
+            # ##: Forward pass using base class method.
+            action_logits, values = self._forward_pass(observations, training=True)
             values = tf.squeeze(values)
 
             # ##: Calculate losses using the helper method.
@@ -203,11 +189,8 @@ class A2CAgent(ActorCriticAgent):
                 action_logits, values, actions, returns, advantages
             )
 
-        # ##: Calculate gradients and apply them with optional clipping.
-        gradients = tape.gradient(total_loss, self._model.trainable_variables)
-        if self.hyperparameters.max_grad_norm is not None:
-            gradients, _ = tf.clip_by_global_norm(gradients, self.hyperparameters.max_grad_norm)
-        self._optimizer.apply_gradients(zip(gradients, self._model.trainable_variables))
+        # ##: Apply gradients using base class method.
+        self._apply_gradients(tape, total_loss)
 
         return {
             "total_loss": total_loss,
