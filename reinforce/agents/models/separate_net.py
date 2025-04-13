@@ -10,7 +10,7 @@ from typing import Any, Dict, Tuple
 import tensorflow as tf
 from keras import Model, Sequential, layers
 
-from .resnet import residual_block  # Reuse the existing residual block
+from .resnet import residual_block
 
 
 class SeparateNetACModel(Model):
@@ -34,29 +34,27 @@ class SeparateNetACModel(Model):
         super().__init__()
         self.action_space = action_space
         self.embedding_size = embedding_size
-        self.input_shape_spec = shape  # Store shape for config
+        self.input_shape_spec = shape
 
-        # ##: Define Input Layer
+        # ##: Define Input Layer.
         input_layer = layers.Input(shape=shape)
 
-        # ##: Actor Convolutional Base
+        # ##: Actor Convolutional Base.
         x_actor = layers.Conv2D(32, kernel_size=3, strides=1, padding="same", name="actor_conv1")(input_layer)
         x_actor = layers.BatchNormalization(name="actor_bn1")(x_actor)
         x_actor = layers.Activation("relu", name="actor_relu1")(x_actor)
         x_actor = layers.MaxPool2D(pool_size=(2, 2), name="actor_pool1")(x_actor)
-        x_actor = residual_block(x_actor, filters=64, strides=1)
         x_actor = residual_block(x_actor, filters=64, strides=1)
         x_actor = residual_block(x_actor, filters=128, strides=2)
         x_actor = layers.Flatten(name="actor_flatten")(x_actor)
         actor_features = layers.Dense(self.embedding_size, activation="relu", name="actor_dense_features")(x_actor)
         self.actor_base = Model(inputs=input_layer, outputs=actor_features, name="actor_base")
 
-        # ##: Critic Convolutional Base
+        # ##: Critic Convolutional Base.
         x_critic = layers.Conv2D(32, kernel_size=3, strides=1, padding="same", name="critic_conv1")(input_layer)
         x_critic = layers.BatchNormalization(name="critic_bn1")(x_critic)
         x_critic = layers.Activation("relu", name="critic_relu1")(x_critic)
         x_critic = layers.MaxPool2D(pool_size=(2, 2), name="critic_pool1")(x_critic)
-        x_critic = residual_block(x_critic, filters=64, strides=1)
         x_critic = residual_block(x_critic, filters=64, strides=1)
         x_critic = residual_block(x_critic, filters=128, strides=2)
         x_critic = layers.Flatten(name="critic_flatten")(x_critic)
@@ -65,11 +63,15 @@ class SeparateNetACModel(Model):
 
         # ##: Actor head for policy.
         self.actor_head = Sequential(
-            [layers.Dense(128, activation="relu"), layers.Dense(action_space)], name="actor_head"
+            [layers.Dense(128, activation="relu"), layers.Dense(128, activation="relu"), layers.Dense(action_space)],
+            name="actor_head",
         )
 
         # ##: Critic head for value function.
-        self.critic_head = Sequential([layers.Dense(128, activation="relu"), layers.Dense(1)], name="critic_head")
+        self.critic_head = Sequential(
+            [layers.Dense(128, activation="relu"), layers.Dense(128, activation="relu"), layers.Dense(1)],
+            name="critic_head",
+        )
 
     def call(self, inputs: tf.Tensor, training=None, mask=None) -> Tuple[tf.Tensor, tf.Tensor]:
         """
