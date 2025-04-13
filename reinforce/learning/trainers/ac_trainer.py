@@ -258,7 +258,6 @@ class ActorCriticTrainer(BaseTrainer):
                 context={"subset": "train_action"},
             )
 
-        # Log other scalar metrics from agent_info
         other_agent_metrics = {k: v for k, v in agent_info.items() if k != "action_probs"}
         scalar_agent_metrics = {
             k: v.numpy() if hasattr(v, "numpy") else v

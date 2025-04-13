@@ -9,7 +9,7 @@ It supports parallel execution, pruning of underperforming trials, and visualiza
 import json
 from pathlib import Path
 from traceback import format_exc
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 from loguru import logger
 from optuna import Trial, TrialPruned
@@ -55,12 +55,7 @@ class HyperparameterSearch:
         Returns
         -------
         AimTracker
-            An AimLogger instance if the initialization was successful.
-
-        Raises
-        ------
-        Exception
-            If there are issues with initializing the AimLogger.
+            An AimTracker instance if the initialization was successful.
         """
         search_aim_logger = AimTracker(
             experiment_name=f"hyperparameter_{search_name}", tags=["hyperparameter-search", "summary", search_name]
@@ -126,7 +121,7 @@ class HyperparameterSearch:
             logger.info("Best objective value (mean reward): N/A")
         logger.info(f"Best hyperparameters: {json.dumps(summary['best_hyperparameters'], indent=2)}")
 
-    def _prepare_trial_config(self, params: Dict[str, Any], trial_number: int) -> tuple[Dict[str, Any], list[str]]:
+    def _prepare_trial_config(self, params: Dict[str, Any], trial_number: int) -> Tuple[Dict[str, Any], list[str]]:
         """
         Prepare the configuration for a specific trial using sampled parameters.
 
@@ -142,7 +137,7 @@ class HyperparameterSearch:
 
         Returns
         -------
-        tuple[Dict[str, Any], list[str]]
+        Tuple[Dict[str, Any], list[str]]
             A tuple containing the configuration dictionary and a list of AIM tags.
         """
         if self.base_config is None:
@@ -224,7 +219,7 @@ class HyperparameterSearch:
 
             logger.info(f"--- Trial {trial.number} Completed ---")
             logger.info(f"Final Objective Value: {objective_value:.4f}")
-            return objective_value  # Return the final value for this trial
+            return objective_value
 
         except TrialPruned:
             raise

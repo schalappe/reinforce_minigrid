@@ -7,14 +7,14 @@ from typing import Union
 
 from reinforce.agents.actor_critic import A2CAgent, PPOAgent
 from reinforce.agents.models import ResNetACModel
-from reinforce.configs.models.agent import AgentConfig
+from reinforce.configs.models.agent import A2CConfig, PPOConfig
 
 
 class AgentFactory:
     """Factory class for creating agent instances based on configuration."""
 
     @staticmethod
-    def create(agent_config: AgentConfig, env_action_space_size: int) -> Union[A2CAgent, PPOAgent]:
+    def create(agent_config: Union[A2CConfig, PPOConfig], env_action_space_size: int) -> Union[A2CAgent, PPOAgent]:
         """
         Create an agent based on the Pydantic configuration model.
 
@@ -23,14 +23,14 @@ class AgentFactory:
 
         Parameters
         ----------
-        agent_config : AgentConfig
+        agent_config : A2CConfig | PPOConfig
             Pydantic agent configuration model (e.g., A2CConfig).
         env_action_space_size : int
             The size of the environment's action space.
 
         Returns
         -------
-        Union[A2CAgent, PPOAgent]
+        A2CAgent | PPOAgent
             Created agent instance.
 
         Raises

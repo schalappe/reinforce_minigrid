@@ -13,9 +13,6 @@ from reinforce.agents.base_agent import BaseAgent
 from reinforce.configs.models.agent import A2CConfig, PPOConfig
 from reinforce.utils.persistence import load_model, save_model
 
-# ##: Type alias for hyperparameters, now using the base AgentConfig
-HyperparameterConfig = Union[A2CConfig, PPOConfig]
-
 
 class ActorCriticAgent(BaseAgent):
     """
@@ -26,7 +23,7 @@ class ActorCriticAgent(BaseAgent):
     learning and action selection logic.
     """
 
-    def __init__(self, model: Model, agent_name: str, hyperparameters: HyperparameterConfig):
+    def __init__(self, model: Model, agent_name: str, hyperparameters: Union[A2CConfig, PPOConfig]):
         """
         Initialize the Base Actor-Critic agent with injected model and persistence handler.
 
@@ -36,7 +33,7 @@ class ActorCriticAgent(BaseAgent):
             The Keras model instance to be used by the agent.
         agent_name : str
             The specific name of the agent (e.g., "A2CAgent", "PPOAgent").
-        hyperparameters : HyperparameterConfig
+        hyperparameters : A2CConfig | PPOConfig
             Pydantic model containing hyperparameters (e.g., A2CConfig, PPOConfig).
         """
         self._name = agent_name
@@ -69,13 +66,8 @@ class ActorCriticAgent(BaseAgent):
         """
         loaded_model, loaded_hyperparams_dict = load_model(path=path, agent_name=self.name)
 
-        # ##: Assign the loaded model.
         self._model = loaded_model
-
-        # ##: Parse the loaded hyperparameter dict into the specific Pydantic model.
         self.hyperparameters = self._load_specific_hyperparameters(loaded_hyperparams_dict)
-
-        # ##: Re-initialize action space and optimizer based on loaded hyperparameters.
         self._optimizer = optimizers.Adam(learning_rate=self.hyperparameters.learning_rate)
 
     @property
@@ -139,7 +131,7 @@ class ActorCriticAgent(BaseAgent):
         raise NotImplementedError
 
     @abstractmethod
-    def _load_specific_hyperparameters(self, config: Dict[str, Any]) -> HyperparameterConfig:
+    def _load_specific_hyperparameters(self, config: Dict[str, Any]) -> Union[A2CConfig, PPOConfig]:
         """
         Load specific hyperparameters for the agent.
 
@@ -150,7 +142,7 @@ class ActorCriticAgent(BaseAgent):
 
         Returns
         -------
-        HyperparameterConfig
+        A2CConfig | PPOConfig
             The loaded hyperparameters.
         """
         raise NotImplementedError

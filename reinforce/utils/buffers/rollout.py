@@ -54,7 +54,6 @@ class RolloutBuffer:
         self.gamma = gamma
         self.gae_lambda = gae_lambda
 
-        # ##: Buffer storage (using lists for flexibility, convert to numpy/tf later).
         # ##: Store raw observations first, preprocess when retrieving batch.
         self.observations = [None] * self.buffer_size
         self.actions = np.zeros((self.buffer_size, *self.action_shape), dtype=np.int32)
@@ -154,8 +153,7 @@ class RolloutBuffer:
         # ##: Compute returns by adding advantages to values.
         self.returns = self.advantages + self.values
 
-        # ##: Normalize advantages (optional but recommended).
-        # ##: Check for zero std deviation before normalizing.
+        # ##: Normalize advantages to reduce variance.
         adv_mean = np.mean(self.advantages)
         adv_std = np.std(self.advantages)
         if adv_std > 1e-8:
@@ -177,7 +175,6 @@ class RolloutBuffer:
         if not self.full:
             logger.warning("Retrieving batch from a partially filled buffer.")
 
-        # ##: Ensure advantages and returns have been computed.
         if np.all(self.advantages == 0) or np.all(self.returns == 0):
             logger.info("Advantages/Returns seem uncomputed. Call compute_returns_and_advantages first.")
 

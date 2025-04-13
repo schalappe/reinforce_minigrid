@@ -27,4 +27,3 @@ def setup_logger():
         ),
         colorize=True,
     )
-    logger.info("Logger configured successfully.")

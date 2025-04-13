@@ -4,7 +4,7 @@ Experiment runner for reinforcement learning experiments.
 
 This module provides the `ExperimentRunner` class, which orchestrates the execution of reinforcement
 learning experiments. It handles configuration loading, environment setup, agent initialization,
-training, and logging (via AIM).
+training, and tracking of experiment results (via AIM).
 """
 
 import sys
@@ -29,7 +29,7 @@ class ExperimentRunner:
     Runner for reinforcement learning experiments.
 
     This class sets up and runs reinforcement learning experiments based on configuration files.
-    It supports logging via AIM, Optuna pruning, and saving experiment results.
+    It supports tracking experiments via AIM, Optuna pruning, and saving experiment results.
     """
 
     @classmethod
@@ -122,29 +122,26 @@ class ExperimentRunner:
             If any error occurs during experiment execution.
         """
         start_time = time()
-        logger_instance: Optional[AimTracker] = None
+        tracker: Optional[AimTracker] = None
 
         try:
-            # ##: Setup experiment components using the helper method.
-            trainer, logger_instance = self._setup_experiment(experiment_config, pruning_callback, aim_tags)
-
-            # ##: Run the training.
+            trainer, tracker = self._setup_experiment(experiment_config, pruning_callback, aim_tags)
             results = trainer.train()
 
-            # ##: Calculate and log duration using the logger instance.
+            # ##: Calculate and log duration using the tracker instance.
             end_time = time()
             duration_seconds = end_time - start_time
-            if logger_instance:
-                logger_instance.log_metric("experiment_duration_seconds", duration_seconds)
-                logger_instance.log_params({"experiment_duration_readable": f"{duration_seconds:.2f}s"})
-            logger_instance.close()
+            if tracker:
+                tracker.log_metric("experiment_duration_seconds", duration_seconds)
+                tracker.log_params({"experiment_duration_readable": f"{duration_seconds:.2f}s"})
+            tracker.close()
             logger.info(f"Experiment duration: {duration_seconds:.2f} seconds")
 
             return results
 
         except Exception as exc:
             logger.error(f"An error occurred during the experiment: {exc}")
-            if logger_instance:
-                logger_instance.log_text(f"Experiment failed: {exc}\n{format_exc()}", name="error_log")
-                logger_instance.close()
+            if tracker:
+                tracker.log_text(f"Experiment failed: {exc}\n{format_exc()}", name="error_log")
+                tracker.close()
             sys.exit(1)

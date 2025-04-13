@@ -30,10 +30,6 @@ class A2CTrainerConfig(TrainerConfig):
     update_frequency : int
         Number of steps between agent updates. Must be at least 1.
         Default: 1.
-
-    Notes
-    -----
-    This class inherits all attributes from TrainerConfig and adds episode-specific configuration parameters.
     """
 
     trainer_type: Literal["A2CTrainer"] = "A2CTrainer"

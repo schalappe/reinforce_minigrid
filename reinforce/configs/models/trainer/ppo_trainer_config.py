@@ -34,11 +34,6 @@ class PPOTrainerConfig(TrainerConfig):
         Number of episodes between saving the model. Default is 100.
     log_frequency : int
         Number of episodes between logging progress. Default is 1.
-
-    Notes
-    -----
-    - All integer parameters must be >= 1 (enforced via Pydantic Field constraints)
-    - Configuration is immutable once created (frozen=True)
     """
 
     trainer_type: Literal["PPOTrainer"] = Field("PPOTrainer", description="Trainer type must be 'ppo'")
