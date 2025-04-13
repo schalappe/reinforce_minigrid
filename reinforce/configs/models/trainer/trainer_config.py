@@ -40,13 +40,18 @@ class TrainerConfig(BaseModel):
     """
 
     trainer_type: str = Field(..., description="Type of trainer to use")
-    max_steps_per_episode: int = Field(100, ge=1, description="Maximum number of steps per episode")
+
+    # ##: Fields for training and evaluation.
+    batch_size: int = Field(64, ge=1, description="Minibatch size for training.")
     eval_frequency: int = Field(100, ge=1, description="Number of episodes between evaluations")
     num_eval_episodes: int = Field(5, ge=1, description="Number of episodes to evaluate for")
-    log_frequency: int = Field(10, ge=1, description="Number of episodes between logging")
-    save_frequency: int = Field(500, ge=1, description="Number of episodes between saving the model")
+    max_steps_per_episode: int = Field(100, ge=1, description="Maximum number of steps per episode")
+
+    # ##: Fields for saving models and logs.
     save_dir: Path = Field(Path("outputs") / "models", description="Directory to save models and logs")
     save_path: Optional[str] = Field(None, description="Path to save the final trained agent model")
+    log_frequency: int = Field(10, ge=1, description="Number of episodes between logging")
+    save_frequency: int = Field(500, ge=1, description="Number of episodes between saving the model")
 
     # ##: Fields for Optuna integration (optional, added by ExperimentRunner if needed).
     trial_info: Optional[dict] = Field(None, exclude=True)

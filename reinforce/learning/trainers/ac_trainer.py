@@ -114,7 +114,7 @@ class ActorCriticTrainer:
             elapsed_time = time() - start_time
             mean_reward_100 = mean(self.episode_rewards) if self.episode_rewards else 0
             logger.info(
-                f"Step {self.total_steps}/{self.config.get_max_steps()} | Ep {self.episode} "
+                f"Step {self.total_steps}/{self.config.max_total_steps} | Ep {self.episode} "
                 f"| Ep Steps: {episode_steps} "
                 f"| Ep Reward: {episode_reward:.2f} "
                 f"| Mean Rwd (100): {mean_reward_100:.2f} "

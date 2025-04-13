@@ -72,7 +72,7 @@ class A2CTrainer(ActorCriticTrainer):
             Dictionary of training metrics from the base class finalization.
         """
         start_time = time()
-        max_steps = self.config.get_max_steps()
+        max_steps = self.config.max_total_steps
         observation = self.environment.reset()
         episode_reward = 0
         episode_steps = 0

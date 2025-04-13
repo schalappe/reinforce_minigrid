@@ -6,7 +6,7 @@ This module defines the main configuration structure for reinforcement learning 
 including agent, trainer, and environment configurations.
 """
 
-from typing import Annotated, Optional, Union
+from typing import Annotated, Any, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -63,3 +63,15 @@ class ExperimentConfig(BaseModel):
 
         # ##: Allow arbitrary types for callbacks etc.
         arbitrary_types_allowed = True
+
+    def model_post_init(self, context: Any, /) -> None:
+        """
+        Post-initialization hook to set the maximum total steps for the agent.
+        This ensures that the agent's step limit aligns with the trainer's configuration.
+
+        Parameters
+        ----------
+        context : Any
+            Context parameter (not used in this implementation).
+        """
+        self.agent.max_total_steps = self.trainer.max_total_steps

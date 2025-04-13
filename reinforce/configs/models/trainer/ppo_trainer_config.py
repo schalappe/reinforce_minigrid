@@ -41,13 +41,7 @@ class PPOTrainerConfig(TrainerConfig):
     # ##: PPO specific training loop parameters
     n_steps: int = Field(2048, ge=1, description="Number of steps to collect per rollout (buffer size)")
     n_epochs: int = Field(10, ge=1, description="Number of optimization epochs per rollout")
-    batch_size: int = Field(64, ge=1, description="Minibatch size for PPO updates")
     max_total_steps: int = Field(1_000_000, ge=1, description="Total number of environment steps to train for")
-
-    # ##: Override some base fields if defaults differ or interpretation changes
-    eval_frequency: int = Field(50, ge=1, description="Number of episodes between evaluations")
-    save_frequency: int = Field(100, ge=1, description="Number of episodes between saving the model")
-    log_frequency: int = Field(1, ge=1, description="Number of episodes between logging progress")
 
     class Config:
         """
