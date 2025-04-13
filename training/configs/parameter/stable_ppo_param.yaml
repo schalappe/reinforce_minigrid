@@ -1,20 +1,19 @@
 agent:
   agent_type: PPO
   embedding_size: 107
-  learning_rate: 3.384902344391131e-05
-  gae_lambda: 0.9066835236036991
-  clip_range: 0.2
-  entropy_coef: 0.019678459791982864
-  value_coef: 0.49247479266784994
+  learning_rate: 1.0e-05  # Reduced learning rate
+  gae_lambda: 0.9
+  clip_range: 0.1  # Reduced clip range for more stability
+  entropy_coef: 0.01
+  value_coef: 0.5
   max_grad_norm: 0.5
-  discount_factor: 0.99
-  use_adaptive_kl: true
+  gamma: 0.99
 environment:
   use_image_obs: true
 trainer:
   trainer_type: PPOTrainer
   n_steps: 128
-  n_epochs: 5
+  n_epochs: 3  # Fewer epochs per update
   batch_size: 32
   max_total_steps: 1000
   max_steps_per_episode: 200
@@ -22,5 +21,5 @@ trainer:
   num_eval_episodes: 3
   log_frequency: 10
   save_frequency: 500
-  save_dir: outputs/models/ppo_final
-  save_path: outputs/models/ppo_final
+  save_dir: outputs/models/stable_ppo
+  save_path: outputs/models/stable_ppo

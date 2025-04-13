@@ -9,14 +9,15 @@ environment:
   use_image_obs: true
 trainer:
   trainer_type: A2CTrainer
-  max_episodes: 10000
-  max_steps_per_episode: 1000
-  buffer_capacity: 1000
-  update_frequency: 250
-  eval_frequency: 1000
-  num_eval_episodes: 10
-  batch_size: 128
-  log_frequency: 100
-  save_frequency: 2000
+  max_episodes: 20
+  max_steps_per_episode: 200
+  buffer_capacity: 10
+  max_total_steps: 1000
+  update_frequency: 25
+  eval_frequency: 100
+  num_eval_episodes: 3
+  batch_size: 32
+  log_frequency: 10
+  save_frequency: 500
   save_dir: outputs/models/a2c_final
   save_path: outputs/models/a2c_final

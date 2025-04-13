@@ -111,6 +111,8 @@ class OptunaManager:
                     params[param_path] = trial.suggest_int(
                         param_path, param_config["low"], param_config["high"], log=log_scale
                     )
+                elif param_type == "bool":
+                    params[param_path] = trial.suggest_categorical(param_path, [True, False])
                 else:
                     logger.warning(f"Unsupported parameter type '{param_type}' for {param_path}")
             except KeyError as exc:

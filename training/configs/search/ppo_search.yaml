@@ -1,16 +1,16 @@
-# training/configs/ppo_search.yaml
 base_config:
   agent:
     agent_type: PPO
-    action_space: 7
+    clip_range: 0.2
+    discount_factor: 0.99
     embedding_size: 128
     learning_rate: 0.0003
-    discount_factor: 0.99
     gae_lambda: 0.95
-    clip_range: 0.2
     entropy_coef: 0.01
     value_coef: 0.5
     max_grad_norm: 0.5
+    use_adaptive_kl: true
+    lr_schedule_enabled: true
   environment:
     use_image_obs: true
   trainer:
@@ -18,13 +18,12 @@ base_config:
     n_steps: 2048
     n_epochs: 10
     batch_size: 64
-    max_total_steps: 5000
-    max_steps_per_episode: 100
-    eval_frequency: 50
+    max_total_steps: 1000
+    max_steps_per_episode: 200
+    eval_frequency: 100
     num_eval_episodes: 5
     log_frequency: 10
-    log_env_image_frequency: 10000
-    save_frequency: 100
+    save_frequency: 500
     save_dir: outputs/models/ppo_search_temp
 
 hyperparameters:
@@ -60,6 +59,14 @@ hyperparameters:
     type: float
     low: 0.1
     high: 0.3
+  agent.use_adaptive_kl:
+    type: bool
+  agent.lr_schedule_enabled:
+    type: bool
+  agent.max_grad_norm:
+    type: float
+    low: 0.3
+    high: 1.0
   trainer.n_steps:
     type: int
     low: 512
