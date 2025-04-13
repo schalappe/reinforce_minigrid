@@ -36,6 +36,7 @@ class A2CTrainerConfig(TrainerConfig):
 
     # ##: Episode-based training parameters.
     max_episodes: int = Field(10000, ge=1, description="Maximum number of episodes to train for")
+    buffer_capacity: int = Field(1000, ge=1, description="Size of the rollout buffer")
     update_frequency: int = Field(1, ge=1, description="Number of steps between agent updates")
 
     @property
