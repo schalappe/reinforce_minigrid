@@ -6,7 +6,7 @@ A2C Agent implementation.
 from typing import Any, Dict, Tuple
 
 import tensorflow as tf
-from keras import Model
+from keras import Model, optimizers
 from numpy import ndarray
 
 from reinforce.agents.actor_critic.ac_agent import ActorCriticAgent
@@ -37,6 +37,17 @@ class A2CAgent(ActorCriticAgent):
 
         # ##: Refine the type hint for hyperparameters specific to A2C.
         self.hyperparameters: A2CConfig = hyperparameters
+
+        # ##: Initialize optimizer with optional LR scheduling.
+        if self.hyperparameters.lr_schedule_enabled:
+            initial_learning_rate = self.hyperparameters.learning_rate
+            lr_schedule = optimizers.schedules.PolynomialDecay(
+                initial_learning_rate,
+                decay_steps=self.hyperparameters.max_total_steps,
+                end_learning_rate=initial_learning_rate * self.hyperparameters.lr_decay_factor,
+                power=1.0,
+            )
+            self._optimizer = optimizers.Adam(learning_rate=lr_schedule)
 
     def act(self, observation: ndarray, training: bool = True) -> Tuple[int, Dict[str, Any]]:
         """
@@ -192,8 +203,10 @@ class A2CAgent(ActorCriticAgent):
                 action_logits, values, actions, returns, advantages
             )
 
-        # ##: Calculate gradients and apply them.
+        # ##: Calculate gradients and apply them with optional clipping.
         gradients = tape.gradient(total_loss, self._model.trainable_variables)
+        if self.hyperparameters.max_grad_norm is not None:
+            gradients, _ = tf.clip_by_global_norm(gradients, self.hyperparameters.max_grad_norm)
         self._optimizer.apply_gradients(zip(gradients, self._model.trainable_variables))
 
         return {
