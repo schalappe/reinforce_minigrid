@@ -26,6 +26,8 @@ class A2CConfig(AgentConfig):
         Entropy regularization coefficient (default=0.01). Must be non-negative.
     value_coef : float, optional
         Value loss coefficient (default=0.5). Must be non-negative.
+    gae_lambda : float, optional
+        Factor for Generalized Advantage Estimation (GAE) (default=0.95). Must be between 0 and 1.
     """
 
     agent_type: Literal["A2C"] = "A2C"
@@ -33,3 +35,4 @@ class A2CConfig(AgentConfig):
     learning_rate: float = Field(0.001, ge=0, description="Learning rate for the optimizer")
     entropy_coef: float = Field(0.01, ge=0, description="Entropy regularization coefficient")
     value_coef: float = Field(0.5, ge=0, description="Value loss coefficient")
+    gae_lambda: float = Field(0.95, ge=0, le=1, description="Factor for Generalized Advantage Estimation (GAE)")

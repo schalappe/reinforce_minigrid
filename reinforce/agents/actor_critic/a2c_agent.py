@@ -66,82 +66,46 @@ class A2CAgent(ActorCriticAgent):
             action = tf.random.categorical(action_logits, 1)[0, 0].numpy()
 
         action_probs = tf.nn.softmax(action_logits)
+        log_probs = tf.math.log(action_probs + 1e-10)
+        action_log_prob = log_probs[0, action].numpy()
 
         return action, {
             "value": value[0, 0].numpy(),
             "action_probs": action_probs[0].numpy(),
             "action_logits": action_logits[0].numpy(),
+            "log_prob": action_log_prob,
         }
 
-    def learn(self, experience_batch: Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]) -> Dict[str, Any]:
+    def learn(self, experience_batch: Dict[str, tf.Tensor]) -> Dict[str, Any]:
         """
-        Update the agent based on a batch of experiences provided as tensors.
+        Update the agent based on a batch of rollout data from the RolloutBuffer.
 
         Parameters
         ----------
-        experience_batch : Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
-            A tuple containing batches of tensors:
-            (observations, actions, rewards, next_observations, dones).
-            Observations and next_observations are expected to be preprocessed.
+        experience_batch : Dict[str, tf.Tensor]
+            A dictionary containing preprocessed tensors from the RolloutBuffer:
+            - observations: Batch of observations.
+            - actions: Batch of actions taken.
+            - advantages: Batch of computed advantages (normalized).
+            - returns: Batch of computed returns.
+            - log_probs_old: Log probabilities of actions under the policy used for rollout.
+            - values_old: Value estimates from the policy used for rollout.
 
         Returns
         -------
         Dict[str, Any]
             Dictionary of learning metrics.
         """
-        # ##: Unpack tensors from the dataset batch.
-        # ##: Data is already preprocessed and in tensor format.
-        observations, actions, rewards, next_observations, dones = experience_batch
+        # ##: Unpack tensors from the rollout data dictionary.
+        observations = experience_batch["observations"]
+        actions = experience_batch["actions"]
+        advantages = experience_batch["advantages"]
+        returns = experience_batch["returns"]
 
-        # ##: Compute returns and advantages, and perform one training step.
-        returns, advantages = self._compute_returns_and_advantages(rewards, dones, observations, next_observations)
+        # ##: Perform one training step using the pre-computed advantages and returns.
         metrics = self._train_step(observations, actions, returns, advantages)
 
         return metrics
-
-    def _compute_returns_and_advantages(
-        self, rewards: tf.Tensor, dones: tf.Tensor, observations: tf.Tensor, next_observations: tf.Tensor
-    ) -> Tuple[tf.Tensor, tf.Tensor]:
-        """
-        Compute returns and advantages for the given experiences.
-
-        Parameters
-        ----------
-        rewards : tf.Tensor
-            Batch of rewards.
-        dones : tf.Tensor
-            Batch of episode termination flags.
-        observations : tf.Tensor
-            Batch of observations.
-        next_observations : tf.Tensor
-            Batch of next observations.
-
-        Returns
-        -------
-        Tuple[tf.Tensor, tf.Tensor]
-            Tuple of (returns, advantages).
-        """
-        # ##: Get value estimates for current and next observations.
-        _, values = self._model(observations)
-        _, next_values = self._model(next_observations)
-
-        # ##: Reshape values for easier calculations.
-        values = tf.squeeze(values)
-        next_values = tf.squeeze(next_values)
-
-        # ##: Ensure rewards and dones match the model's compute dtype (e.g., float16)
-        compute_dtype = self._model.compute_dtype
-        rewards = tf.cast(rewards, compute_dtype)
-        dones = tf.cast(dones, compute_dtype)
-
-        # ##: Calculate returns using TD(lambda) with lambda=0 (i.e., TD(0)).
-        discount_factor = tf.cast(self.hyperparameters.discount_factor, compute_dtype)
-        returns = rewards + discount_factor * next_values * (tf.cast(1.0, compute_dtype) - dones)
-
-        # ##: Calculate advantages.
-        advantages = returns - values
-
-        return returns, advantages
 
     def _calculate_losses(
         self,
@@ -172,17 +136,18 @@ class A2CAgent(ActorCriticAgent):
         Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
             Policy loss, value loss, entropy loss, total loss, and entropy.
         """
-        # ##: Select the action probabilities for the actions that were taken.
-        indices = tf.range(tf.shape(actions)[0])
+        # ##: Calculate log probabilities for the actions taken.
+        actions = tf.cast(actions, tf.int32)
+        action_log_probs = tf.nn.log_softmax(action_logits)
+        indices = tf.range(tf.shape(actions)[0], dtype=tf.int32)
         action_indices = tf.stack([indices, actions], axis=1)
-        action_log_probs = tf.math.log(tf.nn.softmax(action_logits) + 1e-10)
         selected_action_log_probs = tf.gather_nd(action_log_probs, action_indices)
 
         # ##: Calculate policy loss (negative for gradient ascent).
-        policy_loss = -tf.reduce_mean(selected_action_log_probs * advantages)
+        policy_loss = -tf.reduce_mean(selected_action_log_probs * tf.stop_gradient(advantages))
 
         # ##: Calculate value loss.
-        value_loss = self.hyperparameters.value_coef * tf.reduce_mean(tf.square(returns - values))
+        value_loss = self.hyperparameters.value_coef * tf.reduce_mean(tf.square(tf.stop_gradient(returns) - values))
 
         # ##: Calculate entropy loss (for exploration).
         action_probs = tf.nn.softmax(action_logits)
