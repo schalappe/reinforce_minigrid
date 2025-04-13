@@ -17,7 +17,7 @@ from loguru import logger
 from reinforce.agents.factory import AgentFactory
 from reinforce.configs.models.experiment import ExperimentConfig
 from reinforce.environments.factory import EnvironmentFactory
-from reinforce.learning.trainers import BaseTrainer
+from reinforce.learning.trainers import ActorCriticTrainer
 from reinforce.learning.trainers.factory import TrainerFactory
 from reinforce.utils.management import AimTracker, setup_logger
 
@@ -38,7 +38,7 @@ class ExperimentRunner:
         experiment_config: ExperimentConfig,
         pruning_callback: Optional[Callable[[int, float], None]] = None,
         aim_tags: Optional[List[str]] = None,
-    ) -> Tuple[BaseTrainer, AimTracker]:
+    ) -> Tuple[ActorCriticTrainer, AimTracker]:
         """
         Set up the experiment components: config, logger, evaluator, checkpoint_manager, env, agent, trainer.
 
@@ -56,7 +56,7 @@ class ExperimentRunner:
 
         Returns
         -------
-        Tuple[BaseTrainer, AimTracker]
+        Tuple[ActorCriticTrainer, AimTracker]
             A tuple containing the initialized trainer and the tracker instance.
         """
         # ##: Initialize Tracker.

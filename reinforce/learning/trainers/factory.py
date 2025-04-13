@@ -9,7 +9,7 @@ from reinforce.agents.actor_critic import A2CAgent, PPOAgent
 from reinforce.configs.models.trainer import A2CTrainerConfig, PPOTrainerConfig
 from reinforce.environments import BaseEnvironment
 from reinforce.learning.trainers.a2c_trainer import A2CTrainer
-from reinforce.learning.trainers.base_trainer import BaseTrainer
+from reinforce.learning.trainers.ac_trainer import ActorCriticTrainer
 from reinforce.learning.trainers.ppo_trainer import PPOTrainer
 from reinforce.utils.management import AimTracker
 
@@ -23,7 +23,7 @@ class TrainerFactory:
     @staticmethod
     def create(
         trainer_config: Trainer, agent: Agent, environment: BaseEnvironment, tracker: AimTracker
-    ) -> BaseTrainer:
+    ) -> ActorCriticTrainer:
         """
         Create a trainer based on the Pydantic configuration model, injecting dependencies.
 
@@ -43,7 +43,7 @@ class TrainerFactory:
 
         Returns
         -------
-        BaseTrainer
+        ActorCriticTrainer
             Created trainer instance.
 
         Raises

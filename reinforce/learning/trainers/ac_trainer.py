@@ -19,7 +19,6 @@ from reinforce.agents.actor_critic import A2CAgent, PPOAgent
 from reinforce.configs.models.trainer import A2CTrainerConfig, PPOTrainerConfig
 from reinforce.environments import BaseEnvironment
 from reinforce.learning.evaluation import evaluate_agent
-from reinforce.learning.trainers.base_trainer import BaseTrainer
 from reinforce.utils.management import AimTracker
 from reinforce.utils.persistence import save_checkpoint
 
@@ -27,7 +26,7 @@ ACAgent = Union[A2CAgent, PPOAgent]
 ACConfig = Union[A2CTrainerConfig, PPOTrainerConfig]
 
 
-class ActorCriticTrainer(BaseTrainer):
+class ActorCriticTrainer:
     """
     Base class for trainers implementing Actor-Critic style algorithms.
 
