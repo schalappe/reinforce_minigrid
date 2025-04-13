@@ -6,7 +6,6 @@ Trainer for Proximal Policy Optimization (PPO) using Rollout Buffers.
 from time import time
 from typing import Any, Dict, Tuple
 
-import tensorflow as tf
 from loguru import logger
 from numpy import mean, ndarray
 
@@ -136,8 +135,7 @@ class PPOTrainer(ActorCriticTrainer):
         last_observation : ndarray
             The last observation from the environment.
         """
-        with tf.device("/cpu:0"):  # Ensure value prediction is on CPU if needed
-            _, last_agent_info = self.agent.act(last_observation, training=False)
+        _, last_agent_info = self.agent.act(last_observation, training=False)
         last_value = last_agent_info["value"]
         last_done = False
 

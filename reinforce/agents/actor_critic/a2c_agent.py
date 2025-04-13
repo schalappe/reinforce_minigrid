@@ -55,10 +55,9 @@ class A2CAgent(ActorCriticAgent):
             The selected action and additional information about the decision.
         """
         observation = preprocess_observation(observation)
-
-        # ##: Add batch dimension if necessary and pass through model.
         if len(observation.shape) == 3:
             observation = tf.expand_dims(observation, axis=0)
+
         action_logits, value = self._model(observation)
 
         if not training:
