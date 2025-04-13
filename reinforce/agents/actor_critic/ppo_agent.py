@@ -166,18 +166,28 @@ class PPOAgent(ActorCriticAgent):
             entropy = tf.reduce_mean(action_dist.entropy())
 
             # ##: Calculate the probability ratio r_t(theta) = exp(log_prob_new - log_prob_old).
-            ratio = tf.exp(log_probs_new - log_probs_old)
+            log_ratio = tf.clip_by_value(log_probs_new - log_probs_old, -10.0, 10.0)
+            ratio = tf.clip_by_value(tf.exp(log_ratio), 1e-10, 1e10)
+
+            # ##: Stabilize advantages.
+            advantages_safe = tf.clip_by_value(advantages, -10.0, 10.0)
 
             # ##: Calculate the clipped surrogate objective.
             clip_range = self.hyperparameters.clip_range
             clipped_ratio = tf.clip_by_value(ratio, 1.0 - clip_range, 1.0 + clip_range)
-            policy_loss_unclipped = ratio * advantages
-            policy_loss_clipped = clipped_ratio * advantages
+
+            # ##: Calculate policy loss.
+            policy_loss_unclipped = ratio * advantages_safe
+            policy_loss_clipped = clipped_ratio * advantages_safe
             policy_loss = -tf.reduce_mean(tf.minimum(policy_loss_unclipped, policy_loss_clipped))
 
             # ##: Calculate value loss end entropy bonus.
-            value_loss = 0.5 * tf.reduce_mean(tf.square(returns - values))
-            entropy_loss = -self.hyperparameters.entropy_coef * entropy
+            value_diff = tf.clip_by_value(returns - values, -10.0, 10.0)
+            value_loss = 0.5 * tf.reduce_mean(tf.square(value_diff))
+
+            # ##: Ensure entropy loss is well-behaved.
+            entropy_bounded = tf.maximum(entropy, -5.0)
+            entropy_loss = -self.hyperparameters.entropy_coef * entropy_bounded
 
             # ##: Calculate KL divergence between old and new policy.
             kl_divergence = tf.reduce_mean(log_probs_old - log_probs_new)
@@ -192,7 +202,7 @@ class PPOAgent(ActorCriticAgent):
                 )
                 total_loss += kl_penalty
 
-        # ##: Calculate gradients and apply them.
+        # ##: Calculate gradients and apply them with enhanced stability.
         gradients = tape.gradient(total_loss, self._model.trainable_variables)
         if self.hyperparameters.max_grad_norm is not None:
             gradients, _ = tf.clip_by_global_norm(gradients, self.hyperparameters.max_grad_norm)
