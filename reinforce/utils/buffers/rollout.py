@@ -258,7 +258,7 @@ class RolloutBuffer:
 
         indices = np.arange(buffer_size_actual)
 
-        for epoch in range(n_epochs):
+        for _ in range(n_epochs):
             np.random.shuffle(indices)
             for start_idx in range(0, buffer_size_actual, batch_size):
                 end_idx = min(start_idx + batch_size, buffer_size_actual)

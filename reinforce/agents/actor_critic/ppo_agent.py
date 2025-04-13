@@ -7,7 +7,7 @@ from typing import Any, Dict, Tuple
 
 import tensorflow as tf
 import tensorflow_probability as tfp
-from keras import Model
+from keras import Model, optimizers
 from numpy import ndarray
 
 from reinforce.agents.actor_critic.ac_agent import ActorCriticAgent
@@ -41,6 +41,17 @@ class PPOAgent(ActorCriticAgent):
 
         # ##: PPO specific: Adaptive KL penalty coefficient.
         self._kl_coefficient = tf.Variable(self.hyperparameters.initial_kl_coeff, trainable=False, dtype=tf.float32)
+
+        # ##: Initialize optimizer with optional LR scheduling.
+        if self.hyperparameters.lr_schedule_enabled:
+            initial_learning_rate = self.hyperparameters.learning_rate
+            lr_schedule = optimizers.schedules.PolynomialDecay(
+                initial_learning_rate,
+                decay_steps=self.hyperparameters.max_total_steps,
+                end_learning_rate=initial_learning_rate * self.hyperparameters.lr_decay_factor,
+                power=1.0,
+            )
+            self._optimizer = optimizers.Adam(learning_rate=lr_schedule)
 
     def act(self, observation: ndarray, training: bool = True) -> Tuple[int, Dict[str, Any]]:
         """
@@ -87,7 +98,7 @@ class PPOAgent(ActorCriticAgent):
             "action_logits": action_logits[0].numpy(),
         }
 
-    def learn(self, experience_batch: Dict[str, tf.Tensor]) -> Dict[str, Any]:
+    def learn(self, experience_batch: Dict[str, tf.Tensor]) -> Tuple[Dict[str, Any], bool]:
         """
         Update the agent based on a batch of experiences sampled from the RolloutBuffer.
 
@@ -101,19 +112,25 @@ class PPOAgent(ActorCriticAgent):
 
         Returns
         -------
-        Dict[str, Any]
-            Dictionary of learning metrics (losses, KL divergence, etc.).
+        Tuple[Dict[str, Any], bool]
+            Tuple containing:
+            - Dictionary of learning metrics (losses, KL divergence, etc.).
+            - Boolean flag indicating if training should continue for this epoch (True) or stop early (False).
         """
         observations = experience_batch["observations"]
         actions = experience_batch["actions"]
         advantages = experience_batch["advantages"]
         returns = experience_batch["returns"]
         log_probs_old = experience_batch["log_probs_old"]
+        values_old = experience_batch["values_old"]
 
-        metrics = self._train_step(observations, actions, advantages, returns, log_probs_old)
+        # ##: Perform a single training step.
+        metrics, should_continue = self._train_step(
+            observations, actions, advantages, returns, log_probs_old, values_old
+        )
 
-        # ##: Adjust KL coefficient if adaptive KL penalty is enabled.
-        if self.hyperparameters.use_adaptive_kl:
+        # ##: Adjust KL coefficient if adaptive KL penalty is enabled and we are continuing.
+        if should_continue and self.hyperparameters.use_adaptive_kl:
             kl_div = metrics.get("kl_divergence", tf.constant(0.0, dtype=tf.float32))
             target_kl = tf.cast(self.hyperparameters.target_kl, dtype=tf.float32)
 
@@ -123,7 +140,7 @@ class PPOAgent(ActorCriticAgent):
                 self._kl_coefficient.assign(self._kl_coefficient.read_value() / 2.0)
             metrics["kl_coeff"] = self._kl_coefficient.read_value()
 
-        return metrics
+        return metrics, should_continue
 
     @tf.function
     def _train_step(
@@ -133,9 +150,11 @@ class PPOAgent(ActorCriticAgent):
         advantages: tf.Tensor,
         returns: tf.Tensor,
         log_probs_old: tf.Tensor,
-    ) -> Dict[str, tf.Tensor]:
+        values_old: tf.Tensor,
+    ) -> Tuple[Dict[str, tf.Tensor], bool]:
         """
         Perform one PPO training step (gradient update).
+        Returns metrics and a flag indicating if training should continue.
 
         Parameters
         ----------
@@ -149,12 +168,17 @@ class PPOAgent(ActorCriticAgent):
             Batch of returns (e.g., GAE returns).
         log_probs_old : tf.Tensor
             Batch of log probabilities from the policy used during rollout collection.
+        values_old : tf.Tensor
+            Batch of value estimates from the policy used during rollout collection.
 
         Returns
         -------
-        Dict[str, tf.Tensor]
-            Dictionary of training metrics for this step.
+        Tuple[Dict[str, tf.Tensor], bool]
+            Tuple containing:
+            - Dictionary of training metrics for this step.
+            - Boolean flag indicating if training should continue (True) or stop early (False).
         """
+        should_continue = True
         with tf.GradientTape() as tape:
             # ##: Forward pass to get current policy logits and value estimates.
             action_logits, values = self._model(observations, training=True)
@@ -181,9 +205,12 @@ class PPOAgent(ActorCriticAgent):
             policy_loss_clipped = clipped_ratio * advantages_safe
             policy_loss = -tf.reduce_mean(tf.minimum(policy_loss_unclipped, policy_loss_clipped))
 
-            # ##: Calculate value loss end entropy bonus.
-            value_diff = tf.clip_by_value(returns - values, -10.0, 10.0)
-            value_loss = 0.5 * tf.reduce_mean(tf.square(value_diff))
+            # ##: Calculate clipped value loss (PPO2-style).
+            clip_range = self.hyperparameters.clip_range
+            values_clipped = values_old + tf.clip_by_value(values - values_old, -clip_range, clip_range)
+            value_loss_unclipped = tf.square(returns - values)
+            value_loss_clipped = tf.square(returns - values_clipped)
+            value_loss = 0.5 * tf.reduce_mean(tf.maximum(value_loss_unclipped, value_loss_clipped))
 
             # ##: Ensure entropy loss is well-behaved.
             entropy_bounded = tf.maximum(entropy, -5.0)
@@ -192,23 +219,31 @@ class PPOAgent(ActorCriticAgent):
             # ##: Calculate KL divergence between old and new policy.
             kl_divergence = tf.reduce_mean(log_probs_old - log_probs_new)
 
-            # ##: Calculate total loss.
+            # ##: Calculate total loss *before* the early stopping check.
             total_loss = policy_loss + self.hyperparameters.value_coef * value_loss + entropy_loss
 
             # ##: Add adaptive KL penalty if enabled.
+            kl_penalty = tf.constant(0.0, dtype=tf.float32)
             if self.hyperparameters.use_adaptive_kl:
                 kl_penalty = self._kl_coefficient.read_value() * tf.maximum(
                     0.0, kl_divergence - self.hyperparameters.target_kl
                 )
                 total_loss += kl_penalty
 
-        # ##: Calculate gradients and apply them with enhanced stability.
-        gradients = tape.gradient(total_loss, self._model.trainable_variables)
-        if self.hyperparameters.max_grad_norm is not None:
-            gradients, _ = tf.clip_by_global_norm(gradients, self.hyperparameters.max_grad_norm)
-        self._optimizer.apply_gradients(zip(gradients, self._model.trainable_variables))
+            # ##: Early stopping check based on KL divergence.
+            target_kl = tf.cast(self.hyperparameters.target_kl, dtype=tf.float32)
+            if tf.greater(kl_divergence, 2.0 * target_kl):
+                should_continue = False
 
-        return {
+        # ##: Calculate and apply gradients only if we should continue.
+        if should_continue:
+            gradients = tape.gradient(total_loss, self._model.trainable_variables)
+            if self.hyperparameters.max_grad_norm is not None:
+                gradients, _ = tf.clip_by_global_norm(gradients, self.hyperparameters.max_grad_norm)
+            self._optimizer.apply_gradients(zip(gradients, self._model.trainable_variables))
+
+        # ##: Construct metrics dictionary regardless of early stopping.
+        metrics = {
             "total_loss": total_loss,
             "policy_loss": policy_loss,
             "value_loss": value_loss,
@@ -219,6 +254,12 @@ class PPOAgent(ActorCriticAgent):
             "returns": tf.reduce_mean(returns),
             "ratio": tf.reduce_mean(ratio),
         }
+
+        if self.hyperparameters.use_adaptive_kl:
+            metrics["kl_coeff"] = self._kl_coefficient.read_value()
+            metrics["kl_penalty"] = kl_penalty
+
+        return metrics, should_continue
 
     def load(self, path: str) -> None:
         """

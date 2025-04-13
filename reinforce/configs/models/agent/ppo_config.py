@@ -49,10 +49,15 @@ class PPOConfig(AgentConfig):
     value_coef: float = Field(0.5, description="Coefficient for the value function loss")
     max_grad_norm: Optional[float] = Field(0.5, description="Maximum norm for gradient clipping (None to disable)")
 
-    # Adaptive KL Penalty options
+    # ##: Adaptive KL Penalty options.
     use_adaptive_kl: bool = Field(False, description="Whether to use adaptive KL penalty")
     target_kl: float = Field(0.01, description="Target KL divergence for adaptive penalty")
     initial_kl_coeff: float = Field(1.0, description="Initial coefficient for the KL penalty")
+
+    # ##: Learning Rate Scheduling options.
+    lr_schedule_enabled: bool = Field(True, description="Whether to use learning rate scheduling")
+    lr_decay_factor: float = Field(0.1, description="Factor to decay learning rate to by the end of training")
+    max_total_steps: int = Field(1_000_000, description="Total training steps for LR decay calculation")
 
     class Config:
         """

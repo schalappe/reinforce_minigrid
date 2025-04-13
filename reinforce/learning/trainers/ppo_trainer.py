@@ -143,11 +143,23 @@ class PPOTrainer(ActorCriticTrainer):
 
         # ##: Perform PPO updates over multiple epochs.
         all_update_metrics = []
-        for _ in range(self.config.n_epochs):
+        for epoch in range(self.config.n_epochs):
+            should_continue_epoch = True
             for batch_data in self.rollout_buffer.sample_mini_batches(batch_size=self.config.batch_size, n_epochs=1):
-                update_metrics = self.agent.learn(batch_data)
+                update_metrics, should_continue_batch = self.agent.learn(batch_data)
+
                 if update_metrics:
                     all_update_metrics.append(update_metrics)
+
+                # ##: Check the early stopping flag from the agent.
+                if not should_continue_batch:
+                    logger.info(f"Early stopping triggered in epoch {epoch+1} due to high KL divergence.")
+                    should_continue_epoch = False
+                    break
+
+            # ##: If early stopping was triggered in the inner loop, break the outer epoch loop too.
+            if not should_continue_epoch:
+                break
 
         # ##: Log aggregated update metrics for the rollout.
         if all_update_metrics:
