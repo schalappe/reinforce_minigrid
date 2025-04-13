@@ -70,7 +70,7 @@ hyperparameters:
   trainer.n_steps:
     type: int
     low: 512
-    high: 4096
+    high: 2048
     step: 512
   trainer.n_epochs:
     type: int

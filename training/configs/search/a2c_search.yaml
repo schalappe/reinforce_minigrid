@@ -63,7 +63,7 @@ hyperparameters:
   trainer.buffer_capacity:
     type: int
     low: 512
-    high: 4096
+    high: 2048
     step: 512
   trainer.batch_size:
     type: categorical

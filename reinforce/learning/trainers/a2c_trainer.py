@@ -118,7 +118,8 @@ class A2CTrainer(ActorCriticTrainer):
                     break
 
             # ##: Compute returns and advantages after collecting the rollout.
-            _, last_value = self.agent.model(tf.expand_dims(preprocess_observation(observation), axis=0))
+            with tf.device("/cpu:0"):
+                _, last_value = self.agent.model(tf.expand_dims(preprocess_observation(observation), axis=0))
             last_value = last_value[0, 0].numpy()
             self.buffer.compute_returns_and_advantages(last_value=last_value, last_done=done)
 
