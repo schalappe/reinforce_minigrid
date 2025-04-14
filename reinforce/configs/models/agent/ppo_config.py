@@ -52,4 +52,3 @@ class PPOConfig(AgentConfig):
 
         allow_population_by_field_name = True
         validate_assignment = True
-        frozen = True

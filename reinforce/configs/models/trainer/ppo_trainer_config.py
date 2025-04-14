@@ -59,4 +59,3 @@ class PPOTrainerConfig(TrainerConfig):
 
         arbitrary_types_allowed = True
         validate_assignment = True
-        frozen = True

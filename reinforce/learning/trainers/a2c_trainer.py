@@ -74,11 +74,13 @@ class A2CTrainer(ActorCriticTrainer):
         start_time = time()
         max_steps = self.config.max_total_steps
         observation = self.environment.reset()
-        episode_reward = 0
-        episode_steps = 0
-        done = False
 
         while self.total_steps < max_steps:
+            logger.info(f"Collecting rollout for episode {self.episode}")
+            episode_reward = 0
+            episode_steps = 0
+            done = False
+
             for _ in range(self.config.buffer_capacity):
                 # ##: Run one step in the environment.
                 next_observation, reward, done, action, agent_info = self._run_environment_step(observation)
@@ -127,6 +129,7 @@ class A2CTrainer(ActorCriticTrainer):
             rollout_data = self.buffer.get_batch()
 
             # ##: Update the agent using the collected rollout data.
+            logger.info(f"Updating policy for episode {self.episode}")
             learn_info = self.agent.learn(rollout_data)
             self._log_agent_update_metrics(learn_info)
 
@@ -134,5 +137,6 @@ class A2CTrainer(ActorCriticTrainer):
             self.buffer.clear()
 
         # ##: Final evaluation, logging, and saving handled by base class method.
+        logger.info("Training finished. Finalizing...")
         final_metrics = self._finalize_training()
         return final_metrics
