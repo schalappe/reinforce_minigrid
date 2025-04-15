@@ -74,7 +74,7 @@ def train(config):
     tf.random.set_seed(config["seed"])
 
     # ##: Initialize Environment.
-    print(f"Creating environment: {config['env_id']}")
+    print("Creating environment")
     env = Maze()
     env = ImgObsWrapper(RGBImgObsWrapper(env))
 

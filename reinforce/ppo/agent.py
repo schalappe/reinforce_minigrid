@@ -22,6 +22,7 @@ DEFAULT_HYPERPARAMS = {
     "train_value_iterations": 80,
     "target_kl": 0.01,
     "seed": 1337,
+    "mini_batch_size": 64,  # Added for mini-batch updates
 }
 
 
@@ -52,6 +53,7 @@ class PPOAgent:
         self.hyperparams = DEFAULT_HYPERPARAMS.copy()
         if hyperparams:
             self.hyperparams.update(hyperparams)
+        self.mini_batch_size = self.hyperparams["mini_batch_size"]
 
         # ##: Use default network parameters if none provided.
         self.network_params = network_params if network_params else {}
@@ -204,20 +206,55 @@ class PPOAgent:
         return_buffer = tf.convert_to_tensor(return_buffer, dtype=tf.float32)
         logprobability_buffer = tf.convert_to_tensor(logprobability_buffer, dtype=tf.float32)
 
-        # ##: Update policy with early stopping.
-        for _ in range(self.hyperparams["train_policy_iterations"]):
-            kl = self.train_policy(
-                observation_buffer,
-                action_buffer,
-                logprobability_buffer,
-                advantage_buffer,
-            )
-            if kl > 1.5 * self.hyperparams["target_kl"]:
+        batch_size = observation_buffer.shape[0]
+        indices = tf.range(batch_size)
+
+        # ##: Update policy with early stopping, using mini-batches.
+        for i in range(self.hyperparams["train_policy_iterations"]):
+            indices = tf.random.shuffle(indices)
+            total_kl = 0.0
+            num_processed = 0
+            for start in range(0, batch_size, self.mini_batch_size):
+                end = start + self.mini_batch_size
+                minibatch_indices = indices[start:end]
+                mb_size = tf.shape(minibatch_indices)[0]
+
+                # ##: Slice data for the mini-batch.
+                mb_observation = tf.gather(observation_buffer, minibatch_indices)
+                mb_action = tf.gather(action_buffer, minibatch_indices)
+                mb_logprobability = tf.gather(logprobability_buffer, minibatch_indices)
+                mb_advantage = tf.gather(advantage_buffer, minibatch_indices)
+
+                kl = self.train_policy(
+                    mb_observation,
+                    mb_action,
+                    mb_logprobability,
+                    mb_advantage,
+                )
+                total_kl += kl * tf.cast(mb_size, tf.float32)
+                num_processed += mb_size
+
+            # ##: Average KL divergence over the full batch.
+            avg_kl = total_kl / tf.cast(num_processed, tf.float32)
+
+            if avg_kl > 1.5 * self.hyperparams["target_kl"]:
+                print(
+                    f"  Policy training epoch {i+1}: KL divergence ({avg_kl:.4f}) exceeded target ({self.hyperparams['target_kl']:.4f}). Stopping early."
+                )
                 break
 
-        # ##: Update value function.
+        # ##: Update value function using mini-batches.
         for _ in range(self.hyperparams["train_value_iterations"]):
-            self.train_value_function(observation_buffer, return_buffer)
+            indices = tf.random.shuffle(indices)  # Re-shuffle for value function updates
+            for start in range(0, batch_size, self.mini_batch_size):
+                end = start + self.mini_batch_size
+                minibatch_indices = indices[start:end]
+
+                # ##: Slice data for the mini-batch.
+                mb_observation = tf.gather(observation_buffer, minibatch_indices)
+                mb_return = tf.gather(return_buffer, minibatch_indices)
+
+                self.train_value_function(mb_observation, mb_return)
 
     def save_weights(self, path: Union[str, Path]):
         """
@@ -232,7 +269,7 @@ class PPOAgent:
         save_directory.mkdir(parents=True, exist_ok=True)
 
         self.actor.save(save_directory / "ppo_actor.keras")
-        self.critic.save(save_directory / "ppo_critic.weights.keras")
+        self.critic.save(save_directory / "ppo_critic.keras")
         print(f"Agent weights saved to {save_directory}")
 
     def load_weights(self, path: Union[str, Path]):
@@ -252,6 +289,6 @@ class PPOAgent:
         if not actor_path.exists() or not critic_path.exists():
             raise FileNotFoundError(f"Model files not found at {load_directory}")
 
-        self.actor = models.load_model(actor_path)
-        self.critic = models.load_model(critic_path)
+        self.actor = models.load_model(actor_path, safe_mode=False)
+        self.critic = models.load_model(critic_path, safe_mode=False)
         print(f"Agent weights loaded from {load_directory}")

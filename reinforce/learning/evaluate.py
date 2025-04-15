@@ -6,10 +6,12 @@ import os
 
 os.environ["KERAS_BACKEND"] = "tensorflow"  # Ensure Keras uses TensorFlow backend
 
+from pathlib import Path
+
 import imageio
 import numpy as np
 import tensorflow as tf
-from minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
+from minigrid.wrappers import ImgObsWrapper, RGBImgObsWrapper
 from tqdm import tqdm
 
 from maze.envs import Maze
@@ -48,7 +50,8 @@ def evaluate(config):
     tf.random.set_seed(config["seed"])
 
     # ##: Initialize Environment.
-    env = ImgObsWrapper(RGBImgPartialObsWrapper(Maze()))
+    env = Maze()
+    env = ImgObsWrapper(RGBImgObsWrapper(env))
 
     observation_shape = env.observation_space.shape
     num_actions = env.action_space.n
@@ -60,9 +63,9 @@ def evaluate(config):
     agent = PPOAgent(env.observation_space, env.action_space, network_params=network_params)
 
     # #: Load Weights.
-    load_path_prefix = os.path.join(config["load_dir"], config["weights_prefix"])
+    load_path_prefix = Path(config["load_dir"]) / config["weights_prefix"]
     print(f"Loading weights from: {load_path_prefix}")
-    agent.load_weights(Path(load_path_prefix))
+    agent.load_weights(load_path_prefix)
 
     # --- Evaluation Loop ---
     print(f"Starting evaluation for {config['num_episodes']} episodes...")
@@ -78,10 +81,8 @@ def evaluate(config):
         done = False
 
         while not done:
-            if config["save_gif"] and render_mode == "rgb_array":
-                frame = env.render()
-                if frame is not None:
-                    frames.append(frame)
+            if config["save_gif"]:
+                frames.append(observation)
 
             _, action_tensor = agent.sample_action(observation)
             action = action_tensor[0].numpy()
@@ -97,7 +98,8 @@ def evaluate(config):
 
         total_rewards.append(episode_reward)
         episode_lengths.append(episode_length)
-        if config["save_gif"] and render_mode == "rgb_array":
+        if config["save_gif"]:
+            print(len(frames))
             frames.append(np.zeros_like(frames[-1]))
 
     # --- Results ---
