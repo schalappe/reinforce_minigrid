@@ -150,7 +150,7 @@ class PPOAgent:
         return logprobability
 
     @tf.function
-    def sample_action(self, observation: tf.Tensor, training: bool = False) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+    def sample_action(self, observation: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
         """
         Sample an action from the policy given an observation.
 
@@ -162,8 +162,6 @@ class PPOAgent:
             The observation from the environment. Should have the shape defined
             by `observation_space`. If a single observation is passed (less dimensions
             than expected), it will be expanded to include a batch dimension.
-        training : bool, optional
-            Whether the model is in training mode. Default is False.
 
         Returns
         -------
@@ -184,7 +182,7 @@ class PPOAgent:
         action = ops.squeeze(random.categorical(logits, 1, seed=self.seed_generator), axis=1)
 
         # ##: Calculate the log probability of the sampled action.
-        logprobability = self._logprobabilities(logits, action) if not training else logits
+        logprobability = self._logprobabilities(logits, action)
 
         # ##: Squeeze value if batch size was 1.
         if value.shape[0] == 1:
