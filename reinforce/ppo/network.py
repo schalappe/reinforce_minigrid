@@ -49,7 +49,7 @@ def build_actor_critic(
     inputs = Input(shape=observation_shape, dtype=tf.float32, name="observation_input")
 
     # ##: Normalize pixel values to [0, 1].
-    normalized_inputs = layers.Lambda(lambda layer: layer / 255.0)(inputs)
+    normalized_inputs = layers.Rescaling(1.0 / 255.0)(inputs)
 
     # ##: Shared Convolutional Base.
     conv = layers.Conv2D(
