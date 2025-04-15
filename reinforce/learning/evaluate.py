@@ -6,7 +6,6 @@ Loads a pre-trained agent and runs it for a specified number of episodes, report
 and optionally saving a GIF.
 """
 
-import argparse
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -15,7 +14,7 @@ import numpy as np
 from loguru import logger
 from tqdm import tqdm
 
-from reinforce.learning.utils.config import DEFAULT_EVAL_CONFIG
+from reinforce.learning.utils.config import get_eval_config
 from reinforce.learning.utils.environment import setup_environment
 from reinforce.ppo.agent import PPOAgent
 
@@ -122,85 +121,6 @@ def evaluate(config: Dict[str, Any]):
     logger.info("Evaluation complete.")
 
 
-def parse_arguments() -> Dict[str, Any]:
-    """
-    Parses command-line arguments for the evaluation script.
-
-    Uses defaults from DEFAULT_EVAL_CONFIG and allows overrides.
-
-    Returns
-    -------
-    Dict[str, Any]
-        Dictionary containing the parsed configuration.
-    """
-    parser = argparse.ArgumentParser(description="Evaluate PPO agent on MiniGrid Maze")
-
-    # Core Evaluation Parameters
-    parser.add_argument(
-        "--num-episodes", type=int, default=DEFAULT_EVAL_CONFIG["num_episodes"], help="Number of episodes to evaluate"
-    )
-    parser.add_argument("--seed", type=int, default=DEFAULT_EVAL_CONFIG["seed"], help="Random seed for evaluation")
-    parser.add_argument(
-        "--load-dir", type=str, default=DEFAULT_EVAL_CONFIG["load_dir"], help="Directory containing saved weights"
-    )
-    parser.add_argument(
-        "--weights-prefix",
-        type=str,
-        default=DEFAULT_EVAL_CONFIG["weights_prefix"],
-        help="Prefix of the saved weights files (e.g., ppo_maze_epoch_50)",
-    )
-    parser.add_argument(
-        "--max-episode-steps",
-        type=int,
-        default=DEFAULT_EVAL_CONFIG["max_episode_steps"],
-        help="Maximum steps per evaluation episode",
-    )
-    parser.add_argument(
-        "--render",
-        action="store_true",
-        default=DEFAULT_EVAL_CONFIG["render"],
-        help="Render environment during evaluation",
-    )
-
-    # GIF Saving Parameters
-    parser.add_argument(
-        "--save-gif",
-        action="store_true",
-        default=DEFAULT_EVAL_CONFIG["save_gif"],
-        help="Save a GIF of the evaluation episodes",
-    )
-    parser.add_argument(
-        "--gif-path", type=str, default=DEFAULT_EVAL_CONFIG["gif_path"], help="Path to save the evaluation GIF"
-    )
-
-    # Network Parameters (must match the saved model)
-    parser.add_argument(
-        "--conv-filters",
-        type=int,
-        default=DEFAULT_EVAL_CONFIG["conv_filters"],
-        help="Number of filters in convolutional layers (must match trained model)",
-    )
-    parser.add_argument(
-        "--conv-kernel-size",
-        type=int,
-        default=DEFAULT_EVAL_CONFIG["conv_kernel_size"],
-        help="Kernel size for convolutional layers (must match trained model)",
-    )
-    parser.add_argument(
-        "--dense-units",
-        type=int,
-        default=DEFAULT_EVAL_CONFIG["dense_units"],
-        help="Number of units in dense layers (must match trained model)",
-    )
-
-    args = parser.parse_args()
-    # Ensure kernel size is present if filters are specified (common dependency)
-    if args.conv_filters is not None and args.conv_kernel_size is None:
-        parser.error("--conv-kernel-size is required if --conv-filters is specified.")
-
-    return vars(args)
-
-
 if __name__ == "__main__":
-    evaluation_config = parse_arguments()
+    evaluation_config = get_eval_config()
     evaluate(evaluation_config)

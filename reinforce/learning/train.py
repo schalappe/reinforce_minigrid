@@ -6,7 +6,6 @@ This script initializes the environment, agent, and buffer, then runs the PPO tr
 of epochs. Metrics are logged, and agent weights are saved periodically.
 """
 
-import argparse
 import os
 import time
 from pathlib import Path
@@ -18,7 +17,7 @@ import tensorflow as tf
 from loguru import logger
 from tqdm import tqdm
 
-from reinforce.learning.utils.config import DEFAULT_TRAIN_CONFIG
+from reinforce.learning.utils.config import get_train_config
 from reinforce.learning.utils.environment import setup_environment
 from reinforce.learning.utils.logging import MetricsLogger
 from reinforce.ppo.agent import PPOAgent
@@ -149,106 +148,6 @@ def train(config: Dict[str, Any]):
     env.close()
 
 
-def parse_arguments() -> Dict[str, Any]:
-    """
-    Parses command-line arguments for the training script.
-
-    Uses defaults from DEFAULT_TRAIN_CONFIG and allows overrides.
-
-    Returns
-    -------
-    Dict[str, Any]
-        Dictionary containing the parsed configuration.
-    """
-    parser = argparse.ArgumentParser(description="Train PPO agent on MiniGrid Maze")
-
-    # Core Training Parameters
-    parser.add_argument("--epochs", type=int, default=DEFAULT_TRAIN_CONFIG["epochs"], help="Number of training epochs")
-    parser.add_argument(
-        "--steps-per-epoch",
-        type=int,
-        default=DEFAULT_TRAIN_CONFIG["steps_per_epoch"],
-        help="Number of steps per epoch",
-    )
-    parser.add_argument(
-        "--save-freq",
-        type=int,
-        default=DEFAULT_TRAIN_CONFIG["save_freq"],
-        help="Frequency (in epochs) to save weights",
-    )
-    parser.add_argument(
-        "--render",
-        action="store_true",
-        default=DEFAULT_TRAIN_CONFIG["render"],
-        help="Render environment during training",
-    )
-    parser.add_argument("--seed", type=int, default=DEFAULT_TRAIN_CONFIG["seed"], help="Random seed")
-    parser.add_argument(
-        "--save-dir", type=str, default=DEFAULT_TRAIN_CONFIG["save_dir"], help="Directory to save checkpoints and logs"
-    )
-
-    # PPO Hyperparameters
-    parser.add_argument("--gamma", type=float, default=DEFAULT_TRAIN_CONFIG["gamma"], help="Discount factor")
-    parser.add_argument("--lam", type=float, default=DEFAULT_TRAIN_CONFIG["lam"], help="GAE lambda parameter")
-    parser.add_argument(
-        "--clip-ratio", type=float, default=DEFAULT_TRAIN_CONFIG["clip_ratio"], help="PPO clipping ratio"
-    )
-    parser.add_argument(
-        "--plr",
-        type=float,
-        default=DEFAULT_TRAIN_CONFIG["policy_learning_rate"],
-        dest="policy_learning_rate",
-        help="Policy learning rate",
-    )
-    parser.add_argument(
-        "--vlr",
-        type=float,
-        default=DEFAULT_TRAIN_CONFIG["value_function_learning_rate"],
-        dest="value_function_learning_rate",
-        help="Value function learning rate",
-    )
-    parser.add_argument(
-        "--pi-iters",
-        type=int,
-        default=DEFAULT_TRAIN_CONFIG["train_policy_iterations"],
-        dest="train_policy_iterations",
-        help="Policy training iterations per epoch",
-    )
-    parser.add_argument(
-        "--v-iters",
-        type=int,
-        default=DEFAULT_TRAIN_CONFIG["train_value_iterations"],
-        dest="train_value_iterations",
-        help="Value function training iterations per epoch",
-    )
-    parser.add_argument(
-        "--target-kl",
-        type=float,
-        default=DEFAULT_TRAIN_CONFIG["target_kl"],
-        help="Target KL divergence for early stopping policy training",
-    )
-
-    # Network Parameters
-    parser.add_argument(
-        "--conv-filters",
-        type=int,
-        default=DEFAULT_TRAIN_CONFIG["conv_filters"],
-        help="Number of filters in convolutional layers",
-    )
-    parser.add_argument(
-        "--conv-kernel-size",
-        type=int,
-        default=DEFAULT_TRAIN_CONFIG["conv_kernel_size"],
-        help="Kernel size for convolutional layers",
-    )  # Added missing default access
-    parser.add_argument(
-        "--dense-units", type=int, default=DEFAULT_TRAIN_CONFIG["dense_units"], help="Number of units in dense layers"
-    )
-
-    args = parser.parse_args()
-    return vars(args)  # Convert argparse Namespace to dict
-
-
 if __name__ == "__main__":
-    training_config = parse_arguments()
+    training_config = get_train_config()
     train(training_config)
