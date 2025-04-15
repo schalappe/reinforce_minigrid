@@ -9,7 +9,10 @@ of epochs. Metrics are logged, and agent weights are saved periodically.
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
+import numpy as np
+import optuna
 
 os.environ["KERAS_BACKEND"] = "tensorflow"  # Ensure Keras uses TensorFlow backend
 
@@ -24,16 +27,24 @@ from reinforce.ppo.agent import PPOAgent
 from reinforce.ppo.buffer import Buffer
 
 
-def train(config: Dict[str, Any]):
+def train(config: Dict[str, Any], trial: Optional[optuna.Trial] = None) -> float:
     """
-    Trains the PPO agent on the Maze environment using the provided configuration.
+    Trains the PPO agent on the Maze environment using the provided configuration,
+    optionally reporting intermediate results to Optuna for pruning.
 
     Parameters
     ----------
     config : Dict[str, Any]
         Dictionary containing training configuration and hyperparameters.
-        Expected keys include 'seed', 'save_dir', 'epochs', 'steps_per_epoch',
-        'gamma', 'lam', 'save_freq', 'render', and PPO/network hyperparameters.
+    trial : Optional[optuna.Trial], optional
+        An Optuna trial object. If provided, intermediate results are reported
+        for pruning. Defaults to None.
+
+    Returns
+    -------
+    float
+        The average mean return over the last `avg_reward_window` epochs.
+        Returns -infinity if pruned or an error occurs.
     """
     logger.info("--- PPO Training Initialization ---")
     logger.info(f"Configuration: {config}")
@@ -71,6 +82,8 @@ def train(config: Dict[str, Any]):
     start_time = time.time()
     observation, _ = env.reset(seed=config["seed"])
     episode_return, episode_length = 0.0, 0
+    all_epoch_mean_returns = []
+    avg_reward_window = 10
 
     for epoch in range(config["epochs"]):
         epoch_start_time = time.time()
@@ -78,7 +91,10 @@ def train(config: Dict[str, Any]):
         sum_length = 0
         num_episodes = 0
 
-        pbar = tqdm(range(config["steps_per_epoch"]), desc=f"Epoch {epoch + 1}/{config['epochs']}", leave=False)
+        desc = f"Epoch {epoch + 1}/{config['epochs']}"
+        if trial:
+            desc = f"Trial {trial.number} - {desc}"
+        pbar = tqdm(range(config["steps_per_epoch"]), desc=desc, leave=False)
         for t in pbar:
             if config["render"]:
                 env.render()
@@ -127,12 +143,22 @@ def train(config: Dict[str, Any]):
 
         # --- Logging ---
         epoch_duration = time.time() - epoch_start_time
-        mean_return = sum_return / num_episodes if num_episodes > 0 else 0.0
+        mean_return = sum_return / num_episodes if num_episodes > 0 else -np.inf
         mean_length = sum_length / num_episodes if num_episodes > 0 else 0.0
+        all_epoch_mean_returns.append(mean_return)
         logger.info(f"Epoch: {epoch + 1}/{config['epochs']} | Duration: {epoch_duration:.2f}s")
         logger.info(f"Mean Return: {mean_return:.2f} | Mean Length: {mean_length:.2f} | Episodes: {num_episodes}")
 
         metrics.log_epoch(epoch + 1, mean_return, mean_length, num_episodes, epoch_duration)
+
+        # --- Optuna Pruning ---
+        if trial:
+            trial.report(-mean_return, epoch)
+            if trial.should_prune():
+                logger.warning(f"Trial {trial.number} pruned at epoch {epoch + 1}.")
+                metrics.close()
+                env.close()
+                return -float("inf")
 
         # --- Save Weights ---
         if (epoch + 1) % config["save_freq"] == 0 or (epoch + 1) == config["epochs"]:
@@ -147,7 +173,19 @@ def train(config: Dict[str, Any]):
     metrics.close()
     env.close()
 
+    # ##: Calculate final metric: average return over the last N epochs.
+    if len(all_epoch_mean_returns) >= avg_reward_window:
+        final_avg_return = np.mean(all_epoch_mean_returns[-avg_reward_window:])
+    elif all_epoch_mean_returns:
+        final_avg_return = np.mean(all_epoch_mean_returns)
+    else:
+        final_avg_return = -float("inf")
+
+    logger.info(f"Final average return (last {avg_reward_window} epochs): {final_avg_return:.2f}")
+    return final_avg_return
+
 
 if __name__ == "__main__":
     training_config = get_train_config()
-    train(training_config)
+    final_metric = train(training_config, trial=None)
+    logger.info(f"Training complete. Final metric: {final_metric:.2f}")

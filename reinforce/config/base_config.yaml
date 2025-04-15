@@ -1,8 +1,8 @@
 # --- Core Training Parameters ---
 env_id: "Maze-v0"
-epochs: 50
+epochs: 10
 steps_per_epoch: 4000
-save_freq: 10         # Save weights every N epochs
+save_freq: 11         # Save weights every N epochs
 render: false         # Render environment during training
 seed: 42
 save_dir: "checkpoints" # Directory to save checkpoints and logs
