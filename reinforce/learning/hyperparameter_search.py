@@ -157,14 +157,12 @@ def run_optimization(args: argparse.Namespace):
     logger.info(f"Pruner: {study.pruner.__class__.__name__}")
     logger.info(f"Number of Trials: {args.n_trials}")
     logger.info(f"Parallel Jobs (Workers): {args.n_jobs}")
-    logger.info(f"Timeout: {args.timeout} seconds" if args.timeout else "No timeout")
 
     # --- Run Optimization ---
     try:
         study.optimize(
             lambda trial: objective(trial, base_config),
             n_trials=args.n_trials,
-            timeout=args.timeout,
             n_jobs=args.n_jobs,
         )
     except KeyboardInterrupt:
