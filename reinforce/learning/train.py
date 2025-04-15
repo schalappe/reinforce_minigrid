@@ -126,7 +126,7 @@ def train(config):
             if config["render"]:
                 env.render()
 
-            logits, action_tensor = agent.sample_action(observation)
+            action_tensor, _, logits = agent.sample_action(observation, training=True)
             action = action_tensor[0].numpy()
 
             # ##: Environment step.

@@ -84,7 +84,7 @@ def evaluate(config):
             if config["save_gif"]:
                 frames.append(observation)
 
-            _, action_tensor = agent.sample_action(observation)
+            action_tensor, _, _ = agent.sample_action(observation)
             action = action_tensor[0].numpy()
 
             # ##: Environment step.
