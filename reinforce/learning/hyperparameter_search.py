@@ -89,20 +89,17 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
         # ##: Check if training was pruned or failed (indicated by -inf).
         if final_avg_reward == -float("inf"):
             logger.error(f"Trial {trial.number} resulted in an invalid metric (-inf). Treating as failure.")
-            return float("inf")
+            return -float("inf")
 
         logger.info(f"Trial {trial.number} finished. Final Avg Reward (Metric): {final_avg_reward:.2f}")
-
-        # ##: Optuna minimizes by default. Since higher reward is better, return the negative reward.
-        metric_to_optimize = -final_avg_reward
-        return metric_to_optimize
+        return final_avg_reward
 
     except optuna.TrialPruned:
         logger.warning(f"Trial {trial.number} pruned.")
         raise
     except Exception as e:
         logger.error(f"Trial {trial.number} failed: {e}")
-        return float("inf")
+        return -float("inf")
 
 
 def run_optimization(args: argparse.Namespace):
@@ -146,7 +143,7 @@ def run_optimization(args: argparse.Namespace):
     study = optuna.create_study(
         study_name=study_name,
         storage=storage_name,
-        direction="minimize",
+        direction="maximize",
         pruner=pruner,
         load_if_exists=True,
     )

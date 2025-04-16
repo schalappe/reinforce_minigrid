@@ -28,7 +28,7 @@ DEFAULT_HYPERPARAMS = {
     "train_value_iterations": 80,  # Max value function training epochs per update
     "target_kl": 0.01,  # Target KL divergence for early stopping policy training
     "seed": 1337,  # Random seed for reproducibility
-    "mini_batch_size": 64,  # Size of mini-batches for training updates
+    "mini_batch_size": 256,  # Size of mini-batches for training updates
 }
 
 # Constant for KL divergence early stopping threshold multiplier
