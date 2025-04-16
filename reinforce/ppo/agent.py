@@ -13,6 +13,7 @@ import gymnasium as gym
 import keras
 import tensorflow as tf
 from keras import Model, models, ops, random
+from loguru import logger
 
 from reinforce.ppo.buffer import Buffer
 from reinforce.ppo.network import build_actor_critic
@@ -376,7 +377,7 @@ class PPOAgent:
 
             # ##: Early stopping check.
             if avg_kl > KL_EARLY_STOPPING_MULTIPLIER * self.hyperparams["target_kl"]:
-                tf.print(
+                logger.info(
                     f"Policy training epoch {i+1}: KL divergence ({avg_kl:.4f}) exceeded "
                     f"target ({self.hyperparams['target_kl']:.4f}). Stopping early."
                 )
@@ -418,7 +419,7 @@ class PPOAgent:
 
         self.actor.save(actor_path, overwrite=overwrite)
         self.critic.save(critic_path, overwrite=overwrite)
-        tf.print(f"Agent weights saved to {save_directory}")
+        logger.info(f"Agent weights saved to {save_directory}")
 
     def load_weights(self, path: Union[str, Path]):
         """
@@ -448,4 +449,4 @@ class PPOAgent:
 
         self.actor = models.load_model(actor_path, safe_mode=False)
         self.critic = models.load_model(critic_path, safe_mode=False)
-        tf.print(f"Agent weights loaded from {load_directory}")
+        logger.info(f"Agent weights loaded from {load_directory}")

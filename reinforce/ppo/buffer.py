@@ -9,6 +9,7 @@ with an environment. It utilizes Generalized Advantage Estimation (GAE) for calc
 from typing import Tuple
 
 import numpy as np
+from loguru import logger
 from scipy import signal
 
 
@@ -125,7 +126,7 @@ class Buffer:
             The log-probability of the action taken under the policy.
         """
         if self.pointer >= self.max_size:
-            print("Warning: Buffer overflow. Overwriting oldest data.")
+            logger.warning("Buffer overflow. Overwriting oldest data.")
             self.pointer = 0
 
         self.observation_buffer[self.pointer] = observation
@@ -192,13 +193,13 @@ class Buffer:
         last_trajectory_finished = self.trajectory_start_index == self.pointer or self.trajectory_start_index == 0
 
         if not buffer_full:
-            print(
-                f"Warning: Buffer not full ({self.pointer}/{self.max_size}). "
+            logger.warning(
+                f"Buffer not full ({self.pointer}/{self.max_size}). "
                 "Data retrieved might be incomplete or from partial trajectories."
             )
         if not last_trajectory_finished and buffer_full:
-            print(
-                "Warning: Buffer is full, but finish_trajectory() was likely not "
+            logger.warning(
+                "Buffer is full, but finish_trajectory() was likely not "
                 "called for the last path. Final trajectory data might be missing "
                 "advantages and returns."
             )
