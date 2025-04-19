@@ -15,8 +15,11 @@ import tensorflow as tf
 from keras import Model, models, ops, random
 from loguru import logger
 
+from reinforce import setup_logger
 from reinforce.ppo.buffer import Buffer
 from reinforce.ppo.network import build_actor_critic
+
+setup_logger()
 
 # Placeholder for hyperparameters - will be refined later
 DEFAULT_HYPERPARAMS = {
