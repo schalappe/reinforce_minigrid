@@ -23,8 +23,11 @@ from optuna.visualization import (
     plot_slice,
 )
 
+from reinforce import setup_logger
 from reinforce.learning.train import train
 from reinforce.learning.utils.config import DEFAULT_TRAIN_CONFIG
+
+setup_logger()
 
 # --- Constants ---
 STUDY_NAME_PREFIX = "ppo_maze_optimization"

@@ -14,9 +14,12 @@ import numpy as np
 from loguru import logger
 from tqdm import tqdm
 
+from reinforce import setup_logger
 from reinforce.learning.utils.config import get_eval_config
 from reinforce.learning.utils.environment import setup_environment
 from reinforce.ppo.agent import PPOAgent
+
+setup_logger()
 
 
 def evaluate(config: Dict[str, Any]):

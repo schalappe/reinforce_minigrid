@@ -6,7 +6,6 @@ This script initializes the environment, agent, and buffer, then runs the PPO tr
 of epochs. Metrics are logged, and agent weights are saved periodically.
 """
 
-import os
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -14,11 +13,11 @@ from typing import Any, Dict, Optional
 import numpy as np
 import optuna
 
-os.environ["KERAS_BACKEND"] = "tensorflow"  # Ensure Keras uses TensorFlow backend
-
 import tensorflow as tf
 from loguru import logger
 from tqdm import tqdm
+
+from reinforce import setup_logger
 
 from reinforce.learning.utils.config import get_train_config
 from reinforce.learning.utils.environment import setup_environment
@@ -26,6 +25,7 @@ from reinforce.learning.utils.logging import MetricsLogger
 from reinforce.ppo.agent import PPOAgent
 from reinforce.ppo.buffer import Buffer
 
+setup_logger()
 
 def train(config: Dict[str, Any], trial: Optional[optuna.Trial] = None) -> float:
     """
