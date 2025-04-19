@@ -12,6 +12,10 @@ from typing import Any, Dict, Optional
 import yaml
 from loguru import logger
 
+from reinforce import setup_logger
+
+setup_logger()
+
 # Default hyperparameters for PPO training
 DEFAULT_TRAIN_CONFIG: Dict[str, Any] = {
     "env_id": "Maze-v0",  # Environment ID (though Maze is hardcoded for now)

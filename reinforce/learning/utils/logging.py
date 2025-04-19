@@ -8,6 +8,10 @@ from typing import Union
 
 from loguru import logger
 
+from reinforce import setup_logger
+
+setup_logger()
+
 
 class MetricsLogger:
     """

@@ -8,7 +8,9 @@ from loguru import logger
 from minigrid.wrappers import ImgObsWrapper, RGBImgObsWrapper
 
 from maze.envs import Maze
+from reinforce import setup_logger
 
+setup_logger()
 
 def setup_environment(seed: int) -> Env:
     """
