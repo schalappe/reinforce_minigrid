@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-A maze environment using the ``MiniGrid`` framework, where an agent must navigate to a green goal.
+Maze Environment for MiniGrid.
 
-This module implements a simple maze navigation task where the agent needs to find and reach a
-green ball goal. The environment uses the ``MiniGrid`` framework and inherits from ``RoomGridLevel``.
+A maze environment using the ``MiniGrid`` framework, where an agent must navigate from a starting position
+to a green goal ball placed in a random room. The maze consists of a grid of rooms connected by doors.
 """
 
-from typing import Dict, Tuple, Any, SupportsFloat
+from typing import Any, Dict, Optional, SupportsFloat, Tuple
 
 from minigrid.core.world_object import WorldObj
 from minigrid.envs.babyai.core.roomgrid_level import RoomGridLevel
@@ -15,115 +15,162 @@ from minigrid.envs.babyai.core.verifier import GoToInstr, ObjDesc
 
 class Maze(RoomGridLevel):
     """
-    A maze environment where the agent must navigate to a green goal.
+    A maze environment with a goal.
 
-    The environment consists of a 3x3 grid of rooms connected by doors. The agent is randomly placed
-    in the grid and must find its way to a green ball placed in a random room.
+    The agent starts at a random position and must navigate a 3x3 grid of rooms (each 8x8 cells) to
+    reach a green ball. Doors connect the rooms.
 
-    Attributes
+    Parameters
     ----------
-    num_dists : int
-        Number of distractors in the environment.
-    doors_open : bool
-        Flag indicating if doors should be open.
-    instrs : str
-        Instructions for the agent, typically a GoToInstr object.
-    visited : Dict
-        Dictionary tracking visited positions and visit counts.
-    distance : int or None
-        Manhattan distance to the goal from the current position.
-    goal_position : Tuple
-        The (x, y) coordinates of the goal.
+    num_rows : int, optional
+        Number of rows of rooms. Default is 3.
+    num_cols : int, optional
+        Number of columns of rooms. Default is 3.
+    room_size : int, optional
+        Size of each room (width and height). Default is 8.
+    num_dists : int, optional
+        Number of distractor objects to place. Default is 1.
+    doors_open : bool, optional
+        If True, all doors in the maze start open. Default is False.
+    **kwargs
+        Additional keyword arguments passed to the `RoomGridLevel` constructor.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        num_rows: int = 3,
+        num_cols: int = 3,
+        room_size: int = 8,
+        num_dists: int = 1,
+        doors_open: bool = False,
+        **kwargs,
+    ):
         """
-        Initialize the maze environment.
+        Initialize the Maze environment.
 
         Parameters
         ----------
+        num_rows : int, optional
+            Number of rows of rooms. Default is 3.
+        num_cols : int, optional
+            Number of columns of rooms. Default is 3.
+        room_size : int, optional
+            Size of each room (width and height). Default is 8.
+        num_dists : int, optional
+            Number of distractor objects to place. Default is 1.
+        doors_open : bool, optional
+            If True, all doors in the maze start open. Default is False.
         **kwargs
-            Additional arguments passed to the RoomGridLevel constructor.
+            Additional keyword arguments passed to the `RoomGridLevel` constructor.
         """
-        self.num_dists = 1
-        self.doors_open = False
-        self.instrs = ""
-        self.visited: Dict = {}
-        self.distance = None
-        self.goal_position: Tuple = ()
-        super().__init__(num_rows=3, num_cols=3, room_size=8, **kwargs)
+        self.num_dists = num_dists
+        self.doors_open = doors_open
+        self.instrs: Optional[GoToInstr] = None
+        self.visited: Dict[Tuple[int, int], int] = {}
+        self.distance: Optional[int] = None
+        self.goal_position: Tuple[int, int] = ()
+        self.current_room: Optional[Tuple[int, int]] = None
+        self.goal_room: Optional[Tuple[int, int]] = None
+        self.room_transitions: int = 0
+        super().__init__(num_rows=num_rows, num_cols=num_cols, room_size=room_size, **kwargs)
+
+    def get_room_coords(self, x: int, y: int) -> Tuple[int, int]:
+        """
+        Get the room coordinates (i, j) containing the grid position (x, y).
+
+        Parameters
+        ----------
+        x : int
+            The x-coordinate of the grid position.
+        y : int
+            The y-coordinate of the grid position.
+
+        Returns
+        -------
+        Tuple[int, int]
+            The room coordinates (column_index, row_index).
+        """
+        i = x // (self.room_size - 1)
+        j = y // (self.room_size - 1)
+
+        return (min(i, self.num_cols - 1), min(j, self.num_rows - 1))
 
     def reward(self) -> float:
         """
-        Compute the reward for the current state.
+        Calculate the reward based on the agent's current state.
 
-        The reward calculation is based on the agent's distance to the goal and the number of times the current
-        position has been visited. Moving toward the goal provides positive rewards, while revisiting the same
-        positions decreases rewards exponentially.
+        The reward encourages moving towards the goal, exploring new cells, entering rooms closer
+        to the goal room, and penalizes steps taken.
 
         Returns
         -------
         float
-            The calculated reward value.
+            The calculated reward for the current step.
 
         Notes
         -----
-        The reward mechanism encourages:
-        1. Moving toward the goal (higher reward for shorter distances)
-        2. Exploring new areas (revisiting penalizes through higher power)
-        3. Following optimal paths to the goal
+        Reward components:
+        - Goal Reached: +10.0 if agent is at the goal position.
+        - Progress Reward: +0.1 * (previous_distance - current_distance). Positive if closer.
+        - Room Transition Reward: +0.5 if agent moves into a room closer to the goal room.
+        - Exploration Penalty: -0.01 * min(visits - 1, 10). Penalizes revisiting cells.
+        - Step Penalty: -0.01 for each step taken.
         """
         self.visited[self.agent_pos] = self.visited.get(self.agent_pos, 0) + 1
 
-        # ##: Calculate Manhattan distance to goal.
         distance = abs(self.goal_position[1] - self.agent_pos[1]) + abs(self.goal_position[0] - self.agent_pos[0])
 
-        # ##: Check if reached goal.
         if distance == 0:
-            return 10.0  # ##: High positive reward for reaching the goal.
+            return 10.0
 
-        # ##: Get previous distance to calculate progress.
         previous_distance = self.distance if self.distance is not None else distance
         self.distance = distance
 
-        # ##: Calculate progress reward: positive for getting closer, negative for moving away.
+        # ##: Reward for getting closer to the goal.
         progress_reward = (previous_distance - distance) * 0.1
 
-        # ##: Small penalty for revisiting states (scales more gently than exponential).
-        visit_count = self.visited.get(self.agent_pos)
-        exploration_penalty = -0.01 * min(visit_count - 1, 10)  # ##: Cap the penalty.
+        new_room = self.get_room_coords(self.agent_pos[0], self.agent_pos[1])
+        goal_room = self.get_room_coords(self.goal_position[0], self.goal_position[1])
 
-        # ##: Small step penalty to encourage shortest paths.
+        # ##: Reward for entering a room closer to the goal room.
+        room_transition_reward = 0
+        if self.current_room and new_room != self.current_room:
+            self.room_transitions += 1
+            old_room_dist = abs(self.current_room[0] - goal_room[0]) + abs(self.current_room[1] - goal_room[1])
+            new_room_dist = abs(new_room[0] - goal_room[0]) + abs(new_room[1] - goal_room[1])
+            if new_room_dist < old_room_dist:
+                room_transition_reward = 0.5
+        self.current_room = new_room
+
+        # ##: Penalty for revisiting states (capped).
+        visit_count = self.visited.get(self.agent_pos, 0)
+        exploration_penalty = -0.01 * min(visit_count - 1, 10)
+
         step_penalty = -0.01
 
-        # ##: Calculate final reward.
-        reward = progress_reward + exploration_penalty + step_penalty
+        reward = progress_reward + exploration_penalty + step_penalty + room_transition_reward
         return reward
-    
-    def step(self, action: object) -> Tuple[object, SupportsFloat, bool, bool, dict[str, Any]]:
+
+    def step(self, action: Any) -> Tuple[object, SupportsFloat, bool, bool, Dict[str, Any]]:
         """
-        Take a step in the environment.
-        
-        This method overrides the parent class's step method to calculate rewards using the
-        environment's reward function.
-        
+        Execute one time step within the environment.
+
+        Overrides the parent `step` method to use the custom `reward` function.
+
         Parameters
         ----------
-        action : object
-            The action to take in the current state.
-            
+        action : Any
+            The action taken by the agent.
+
         Returns
         -------
-        obs : object
-            An observation from the environment after taking the action.
-        reward : SupportsFloat
-            The reward value calculated by the environment's reward function.
-        terminated : bool
-            Whether the episode has terminated.
-        truncated : bool
-            Whether the episode was truncated.
-        info : dict[str, Any]
-            Additional information about the environment state.
+        Tuple[object, SupportsFloat, bool, bool, Dict[str, Any]]
+            A tuple containing:
+            - obs (object): The agent's observation of the current environment.
+            - reward (SupportsFloat): Amount of reward returned after previous action.
+            - terminated (bool): Whether the episode has ended (e.g., goal reached).
+            - truncated (bool): Whether the episode was ended prematurely (e.g., time limit).
+            - info (Dict[str, Any]): Contains auxiliary diagnostic information.
         """
         obs, _, terminated, truncated, info = super().step(action)
         reward = self.reward()
@@ -131,45 +178,44 @@ class Maze(RoomGridLevel):
 
     def add_goal(self) -> WorldObj:
         """
-        Add a goal object (green ball) to the maze for the agent to reach.
+        Add the goal object (green ball) to a random room.
 
-        This method randomly selects a room in the maze and places a green ball as the goal object.
-        The goal position is stored in the `goal_position` attribute for later reference.
+        Places a green ball in a randomly selected room and stores its position.
 
         Returns
         -------
-        WorldObj:
-            The WorldObj instance representing the goal that was added. This represents the object
-            and distance information.
+        WorldObj
+            The goal object that was placed in the environment.
         """
-        # ##: Add the object to a random room if no room specified.
         room_i = self._rand_int(0, self.num_cols)
         room_j = self._rand_int(0, self.num_rows)
 
-        dist, self.goal_position = self.add_object(room_i, room_j, *("ball", "green"))
-
-        return dist
+        goal_obj, self.goal_position = self.add_object(room_i, room_j, "ball", "green")
+        return goal_obj
 
     def gen_mission(self):
         """
-        Generate a new mission (level) for the agent.
+        Generate a new mission (episode).
 
-        This method:
-        1. Places the agent in a random position
-        2. Connects all rooms with doors
-        3. Adds a goal object
-        4. Creates instruction for the agent
-        5. Initializes the distance to goal
-
-        If doors_open is ``True``, all doors in the maze will be opened.
+        Sets up the environment for a new episode by:
+        1. Placing the agent randomly.
+        2. Connecting all rooms with doors (potentially opening them).
+        3. Adding the goal object.
+        4. Generating the agent's instruction.
+        5. Initializing distance and room tracking variables.
         """
         self.place_agent()
         self.connect_all()
 
-        obj = self.add_goal()
-        self.instrs = GoToInstr(ObjDesc(obj.type, obj.color))
+        goal_obj = self.add_goal()
+        self.instrs = GoToInstr(ObjDesc(goal_obj.type, goal_obj.color))
 
         if self.doors_open:
             self.open_all_doors()
 
+        # ##: Initialize state variables for the new mission.
         self.distance = abs(self.goal_position[1] - self.agent_pos[1]) + abs(self.goal_position[0] - self.agent_pos[0])
+        self.current_room = self.get_room_coords(self.agent_pos[0], self.agent_pos[1])
+        self.goal_room = self.get_room_coords(self.goal_position[0], self.goal_position[1])
+        self.room_transitions = 0
+        self.visited = {}
