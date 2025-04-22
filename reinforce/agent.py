@@ -10,10 +10,14 @@ from typing import Optional, Tuple
 import gymnasium as gym
 import numpy as np
 import tensorflow as tf
+from loguru import logger
 
+from . import setup_logger
 from .buffer import Buffer
 from .network import build_policy_network, build_value_network
 from .ppo import get_action_distribution, train_step
+
+setup_logger()
 
 
 class PPOAgent:
@@ -227,43 +231,40 @@ class PPOAgent:
 
     def save_models(self, path_prefix: str):
         """
-        Saves the policy and value network weights to files.
+        Saves the policy and value networks to files using the .keras format.
 
         Parameters
         ----------
         path_prefix : str
-            The prefix for the filenames. Weights will be saved to
-            `{path_prefix}_policy.weights.h5` and `{path_prefix}_value.weights.h5`.
+            The prefix for the filenames. Models will be saved to
+            `{path_prefix}_policy.keras` and `{path_prefix}_value.keras`.
         """
-        policy_path = f"{path_prefix}_policy.weights.h5"
-        value_path = f"{path_prefix}_value.weights.h5"
-        self.policy_network.save_weights(policy_path)
-        self.value_network.save_weights(value_path)
-        print(f"Models saved to {policy_path} and {value_path}")
+        policy_path = f"{path_prefix}_policy.keras"
+        value_path = f"{path_prefix}_value.keras"
+        self.policy_network.save(policy_path)
+        self.value_network.save(value_path)
+        logger.info(f"Models saved to {policy_path} and {value_path}")
 
     def load_models(self, path_prefix: str):
         """
-        Loads the policy and value network weights from files.
+        Loads the policy and value networks from .keras files.
 
         Parameters
         ----------
         path_prefix : str
-            The prefix for the filenames. Weights will be loaded from
-            `{path_prefix}_policy.weights.h5` and `{path_prefix}_value.weights.h5`.
+            The prefix for the filenames. Models will be loaded from
+            `{path_prefix}_policy.keras` and `{path_prefix}_value.keras`.
 
         Raises
         ------
         Exception
-            Catches and prints exceptions during file loading (e.g., file not found, architecture mismatch).
+            Catches and prints exceptions during file loading (e.g., file not found).
         """
-        policy_path = f"{path_prefix}_policy.weights.h5"
-        value_path = f"{path_prefix}_value.weights.h5"
+        policy_path = f"{path_prefix}_policy.keras"
+        value_path = f"{path_prefix}_value.keras"
         try:
-            self.policy_network.load_weights(policy_path)
-            self.value_network.load_weights(value_path)
+            self.policy_network = tf.keras.models.load_model(policy_path)
+            self.value_network = tf.keras.models.load_model(value_path)
             print(f"Models loaded from {policy_path} and {value_path}")
         except Exception as e:
-            print(
-                f"Error loading models from {policy_path} and {value_path}: {e}. "
-                "Ensure the network architecture matches the saved weights."
-            )
+            print(f"Error loading models from {policy_path} and {value_path}: {e}.")

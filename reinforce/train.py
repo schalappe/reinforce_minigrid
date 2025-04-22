@@ -119,7 +119,7 @@ def train(
     # ##: Prepare for saving models.
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        logger.info(f"Models will be saved to {save_path}_*.weights.h5")
+        logger.info(f"Models will be saved to {save_path}_*.keras")
 
     # ##: Training loop variables.
     current_obs, _ = env.reset(seed=seed)
