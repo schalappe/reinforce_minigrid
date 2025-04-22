@@ -3,26 +3,24 @@
 Main training script for the PPO agent on the MiniGrid Maze environment.
 """
 
+import argparse
 import os
 import time
-import argparse
 from collections import deque
-from typing import Optional # Add this import
+from typing import Optional
 
-import gymnasium as gym
 import numpy as np
 import tensorflow as tf
 from loguru import logger
+from minigrid.wrappers import FullyObsWrapper, ImgObsWrapper
 
 from maze.envs.maze import Maze
 
+from . import setup_logger
 from .agent import PPOAgent
-from .utils import preprocess_observation
-from . import setup_logger # Import logger setup from __init__
 
 
 def train(
-    env_id: str = "MiniGrid-Maze-Custom-v0", # Example registration ID
     total_timesteps: int = 1_000_000,
     steps_per_update: int = 2048,
     learning_rate: float = 3e-4,
@@ -31,15 +29,14 @@ def train(
     clip_param: float = 0.2,
     entropy_coef: float = 0.01,
     vf_coef: float = 0.5,
-    epochs: int = 10, # Increased epochs based on common PPO practice
+    epochs: int = 10,
     batch_size: int = 64,
     seed: int = 42,
-    log_interval: int = 1, # Log every update cycle
-    save_interval: int = 10, # Save every 10 update cycles
+    log_interval: int = 1,
+    save_interval: int = 10,
     save_path: str = "models/ppo_maze",
     load_path: Optional[str] = None,
     render: bool = False,
-    **env_kwargs # Pass additional kwargs to Maze environment
 ):
     """
     Trains the PPO agent on the specified environment.
@@ -85,40 +82,22 @@ def train(
     """
     setup_logger()
     logger.info("Starting PPO training...")
-    logger.info(f"Environment ID: {env_id}")
     logger.info(f"Total Timesteps: {total_timesteps}")
-    logger.info(f"Hyperparameters: lr={learning_rate}, gamma={gamma}, lambda={lam}, clip={clip_param}, "
-                f"entropy={entropy_coef}, vf_coef={vf_coef}, epochs={epochs}, batch_size={batch_size}")
+    logger.info(
+        f"Hyperparameters: lr={learning_rate}, gamma={gamma}, lambda={lam}, clip={clip_param}, "
+        f"entropy={entropy_coef}, vf_coef={vf_coef}, epochs={epochs}, batch_size={batch_size}"
+    )
     logger.info(f"Steps per update: {steps_per_update}")
 
-    # Seeding for reproducibility
+    # ##: Seeding for reproducibility.
     np.random.seed(seed)
     tf.random.set_seed(seed)
-    # Consider seeding the environment action space as well if needed
 
-    # Create environment
-    try:
-        # Try making the environment using gym registry first
-        env = gym.make(env_id, render_mode="human" if render else None, **env_kwargs)
-        logger.info(f"Successfully created environment using gym.make('{env_id}')")
-    except gym.error.Error as e:
-        logger.warning(f"Could not make environment '{env_id}' via gym.make: {e}. Trying direct instantiation.")
-        try:
-            # Fallback to direct instantiation
-            env = Maze(render_mode="human" if render else None, **env_kwargs)
-            logger.info("Successfully created environment using direct Maze instantiation.")
-        except NameError:
-            logger.error("Maze class not found for direct instantiation.")
-            return
-        except Exception as e:
-            logger.error(f"Failed to create environment directly: {e}")
-            return
+    # ##: Create environment.
+    env = ImgObsWrapper(FullyObsWrapper(Maze()))
+    logger.info("Successfully created environment using direct Maze instantiation.")
 
-    # Ensure action space is seeded if environment provides the method
-    if hasattr(env, 'action_space') and hasattr(env.action_space, 'seed'):
-         env.action_space.seed(seed)
-
-    # Initialize agent
+    # ##: Initialize agent.
     agent = PPOAgent(
         env.observation_space,
         env.action_space,
@@ -132,25 +111,25 @@ def train(
         batch_size=batch_size,
     )
 
-    # Load pre-trained models if specified
+    # ##: Load pre-trained models if specified.
     if load_path:
         logger.info(f"Loading models from {load_path}...")
         agent.load_models(load_path)
 
-    # Prepare for saving models
+    # ##: Prepare for saving models.
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         logger.info(f"Models will be saved to {save_path}_*.weights.h5")
 
-    # Training loop variables
-    obs_dict, info = env.reset(seed=seed)
-    current_obs = preprocess_observation(obs_dict)
+    # ##: Training loop variables.
+    current_obs, _ = env.reset(seed=seed)
+    logger.info(current_obs)
     episode_reward = 0
     episode_length = 0
     total_episodes = 0
     update_cycle = 0
 
-    # Logging setup
+    # ##: Logging setup.
     reward_deque = deque(maxlen=100)
     length_deque = deque(maxlen=100)
     start_time = time.time()
@@ -160,23 +139,21 @@ def train(
         update_cycle += 1
         logger.debug(f"Update Cycle {update_cycle} | Timestep {timestep}/{total_timesteps}")
 
-        last_obs_for_bootstrap = None # Store the last observation before learning
+        last_obs_for_bootstrap = None
 
         for step in range(steps_per_update):
-            global_step = timestep + step
-
-            # Get action, value estimate, and log probability from agent
+            # ##: Get action, value estimate, and log probability from agent.
             action, value, action_prob = agent.get_action(current_obs)
 
-            # Step the environment
-            next_obs_dict, reward, terminated, truncated, info = env.step(action)
-            next_obs = preprocess_observation(next_obs_dict)
+            # ##: Step the environment.
+            next_obs_dict, reward, terminated, truncated, _ = env.step(action)
+            next_obs = next_obs_dict
 
-            # Store transition in buffer
+            # ##: Store transition in buffer.
             done = terminated or truncated
             agent.store_transition(current_obs, action, reward, value, done, action_prob)
 
-            # Update current state and episode trackers
+            # ##: Update current state and episode trackers.
             current_obs = next_obs
             episode_reward += reward
             episode_length += 1
@@ -184,33 +161,34 @@ def train(
             if render:
                 env.render()
 
-            # Handle episode end
+            # ##: Handle episode end.
             if done:
                 total_episodes += 1
                 reward_deque.append(episode_reward)
                 length_deque.append(episode_length)
-                logger.debug(f"Episode {total_episodes} finished. Reward: {episode_reward:.2f}, Length: {episode_length}")
+                logger.debug(
+                    f"Episode {total_episodes} finished. Reward: {episode_reward:.2f}, Length: {episode_length}"
+                )
 
-                # Store last observation only if episode ended due to truncation
+                # ##: Store last observation only if episode ended due to truncation.
                 last_obs_for_bootstrap = next_obs if truncated else None
 
-                # Reset environment
-                obs_dict, info = env.reset()
-                current_obs = preprocess_observation(obs_dict)
+                # ##: Reset environment.
+                obs_dict, _ = env.reset()
+                current_obs = obs_dict
                 episode_reward = 0
                 episode_length = 0
             else:
-                 # If loop finishes without done, store the last observation for bootstrapping
-                 if step == steps_per_update - 1:
-                     last_obs_for_bootstrap = next_obs
+                # ##: If loop finishes without done, store the last observation for bootstrapping.
+                if step == steps_per_update - 1:
+                    last_obs_for_bootstrap = next_obs
 
-
-        # Perform learning update
+        # ##: Perform learning update.
         logger.debug(f"Performing learning update for cycle {update_cycle}...")
         agent.learn(last_state=last_obs_for_bootstrap)
         logger.debug("Learning update complete.")
 
-        # Logging
+        # ##: Logging.
         if update_cycle % log_interval == 0 and len(reward_deque) > 0:
             mean_reward = np.mean(reward_deque)
             mean_length = np.mean(length_deque)
@@ -220,7 +198,7 @@ def train(
             logger.info(f"Mean Reward (last 100): {mean_reward:.2f} | Mean Length (last 100): {mean_length:.1f}")
             logger.info(f"FPS: {fps} | Elapsed Time: {elapsed_time:.2f}s")
 
-        # Save models periodically
+        # ##: Save models periodically.
         if save_path and update_cycle % save_interval == 0:
             logger.info(f"Saving models at timestep {timestep + steps_per_update}...")
             agent.save_models(save_path)
@@ -228,10 +206,11 @@ def train(
     logger.info("Training finished.")
     env.close()
 
-    # Final model save
+    # ##: Final model save.
     if save_path:
         logger.info("Saving final models...")
         agent.save_models(save_path + "_final")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train PPO agent on MiniGrid Maze.")
@@ -256,18 +235,9 @@ if __name__ == "__main__":
     parser.add_argument("--room-size", type=int, default=8, help="Size of rooms in the maze")
     parser.add_argument("--doors-open", action="store_true", help="Start with doors open in the maze")
 
-
     args = parser.parse_args()
 
-    # Extract environment specific kwargs
-    env_kwargs = {
-        'room_size': args.room_size,
-        'doors_open': args.doors_open
-        # Add other Maze parameters here if they are added to the parser
-    }
-
     train(
-        env_id=args.env_id,
         total_timesteps=args.total_timesteps,
         steps_per_update=args.steps_per_update,
         learning_rate=args.lr,
@@ -284,5 +254,4 @@ if __name__ == "__main__":
         save_path=args.save_path,
         load_path=args.load_path,
         render=args.render,
-        **env_kwargs
     )
