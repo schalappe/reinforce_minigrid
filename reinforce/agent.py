@@ -22,37 +22,6 @@ class PPOAgent:
 
     This agent implements the PPO algorithm, managing the policy and value networks, an experience buffer,
     and the training process.
-
-    Attributes
-    ----------
-    policy_network : tf.keras.Model
-        The neural network representing the policy (actor).
-    value_network : tf.keras.Model
-        The neural network representing the value function (critic).
-    policy_optimizer : tf.keras.optimizers.Optimizer
-        Optimizer used for updating the policy network.
-    value_optimizer : tf.keras.optimizers.Optimizer
-        Optimizer used for updating the value network.
-    buffer : Buffer
-        Stores transitions (state, action, reward, etc.) and computes advantages.
-    input_shape : tuple
-        Shape of the observation space.
-    num_actions : int
-        Number of possible discrete actions.
-    gamma : float
-        Discount factor.
-    lam : float
-        GAE lambda parameter.
-    clip_param : float
-        PPO clipping parameter epsilon.
-    entropy_coef : float
-        Coefficient for the entropy bonus.
-    vf_coef : float
-        Coefficient for the value function loss.
-    epochs : int
-        Number of optimization epochs per learning step.
-    batch_size : int
-        Mini-batch size for optimization.
     """
 
     def __init__(

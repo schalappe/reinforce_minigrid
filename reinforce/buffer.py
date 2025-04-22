@@ -16,32 +16,6 @@ class Buffer:
     This buffer collects agent experiences (states, actions, rewards, etc.) over a period and computes
     the Generalized Advantage Estimation (GAE) and returns, which are crucial for training policy
     gradient algorithms like PPO.
-
-    Attributes
-    ----------
-    gamma : float
-        Discount factor for future rewards.
-    lam : float
-        Lambda parameter for GAE calculation. Controls the bias-variance
-        trade-off in advantage estimation.
-    states : list[np.ndarray]
-        List of states encountered during trajectory collection.
-    actions : list[int]
-        List of actions taken during trajectory collection.
-    rewards : list[float]
-        List of rewards received during trajectory collection.
-    values : list[float]
-        List of value estimates from the critic network for each state.
-    dones : list[bool]
-        List of boolean flags indicating episode termination after each step.
-    action_probs : list[float]
-        List of log probabilities of the actions taken.
-    advantages : tf.Tensor | None
-        Calculated Generalized Advantage Estimation (GAE) for each step.
-        Computed after calling `compute_advantages_and_returns`. Initially None.
-    returns : tf.Tensor | None
-        Calculated returns (target values for the critic) for each step.
-        Computed after calling `compute_advantages_and_returns`. Initially None.
     """
 
     def __init__(self, gamma: float = 0.99, lam: float = 0.95):
