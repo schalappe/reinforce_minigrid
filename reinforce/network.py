@@ -27,12 +27,8 @@ def build_policy_network(input_shape: tuple, num_actions: int) -> tf.keras.Model
     """
     inputs = layers.Input(shape=input_shape)
 
-    # Use Rescaling layer for normalization (0-255 -> 0-1)
-    # Input needs to be float32 for Rescaling
-    x = layers.Rescaling(1.0 / 255.0)(inputs)
-
     # CNN layers for grid processing
-    x = layers.Conv2D(16, 3, padding="same", activation="relu")(x)
+    x = layers.Conv2D(16, 3, padding="same", activation="relu")(inputs)
     x = layers.Conv2D(32, 3, padding="same", activation="relu")(x)
     x = layers.Conv2D(32, 3, padding="same", activation="relu")(x)
 
@@ -62,11 +58,8 @@ def build_value_network(input_shape: tuple) -> tf.keras.Model:
     """
     inputs = layers.Input(shape=input_shape)
 
-    # Use Rescaling layer for normalization (0-255 -> 0-1)
-    x = layers.Rescaling(1.0 / 255.0)(inputs)
-
     # Same CNN architecture as policy network
-    x = layers.Conv2D(16, 3, padding="same", activation="relu")(x)
+    x = layers.Conv2D(16, 3, padding="same", activation="relu")(inputs)
     x = layers.Conv2D(32, 3, padding="same", activation="relu")(x)
     x = layers.Conv2D(32, 3, padding="same", activation="relu")(x)
 
