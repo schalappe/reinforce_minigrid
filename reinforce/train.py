@@ -36,7 +36,6 @@ def train(
     save_interval: int = 10,
     save_path: str = "models/ppo_maze",
     load_path: Optional[str] = None,
-    render: bool = False,
 ):
     """
     Trains the PPO agent on the specified environment.
@@ -75,10 +74,6 @@ def train(
         Directory and prefix for saving models. Default is "models/ppo_maze".
     load_path : Optional[str], optional
         Path prefix to load pre-trained models from. Default is None.
-    render : bool, optional
-        If True, render the environment during training. Default is False.
-    **env_kwargs
-        Additional keyword arguments to pass to the Maze environment constructor.
     """
     setup_logger()
     logger.info("Starting PPO training...")
@@ -158,9 +153,6 @@ def train(
             episode_reward += reward
             episode_length += 1
 
-            if render:
-                env.render()
-
             # ##: Handle episode end.
             if done:
                 total_episodes += 1
@@ -230,10 +222,6 @@ if __name__ == "__main__":
     parser.add_argument("--save-interval", type=int, default=10, help="Save models every N updates")
     parser.add_argument("--save-path", type=str, default="models/ppo_maze", help="Path prefix to save models")
     parser.add_argument("--load-path", type=str, default=None, help="Path prefix to load pre-trained models")
-    parser.add_argument("--render", action="store_true", help="Render the environment during training")
-    # Add arguments for Maze environment parameters if needed
-    parser.add_argument("--room-size", type=int, default=8, help="Size of rooms in the maze")
-    parser.add_argument("--doors-open", action="store_true", help="Start with doors open in the maze")
 
     args = parser.parse_args()
 
@@ -253,5 +241,4 @@ if __name__ == "__main__":
         save_interval=args.save_interval,
         save_path=args.save_path,
         load_path=args.load_path,
-        render=args.render,
     )
