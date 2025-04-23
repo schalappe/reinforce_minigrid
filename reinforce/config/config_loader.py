@@ -28,9 +28,6 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
     except yaml.YAMLError as e:
         logger.error(f"Error parsing YAML file {path}: {e}")
         sys.exit(1)
-    except Exception as e:
-        logger.error(f"Error reading file {path}: {e}")
-        sys.exit(1)
 
 
 def _map_yaml_to_dataclass_field(dataclass_type: Type[Any], yaml_key: str) -> str:
@@ -54,7 +51,7 @@ def _dict_to_dataclass(dataclass_type: Type[T], data: Dict[str, Any]) -> T:
 
         field_type = field_types[field_name]
 
-        # Handle nested dataclasses
+        # ##: Handle nested dataclasses.
         if dataclasses.is_dataclass(field_type):
             if isinstance(value, dict):
                 mapped_data[field_name] = _dict_to_dataclass(field_type, value)
@@ -63,11 +60,9 @@ def _dict_to_dataclass(dataclass_type: Type[T], data: Dict[str, Any]) -> T:
                     f"Expected dict for nested config '{field_name}' ({field_type.__name__}), "
                     f"got {type(value)}. Using defaults."
                 )
-                # Rely on default_factory for nested dataclasses if YAML provides wrong type
                 mapped_data[field_name] = field_type()
-        # Handle Optional types (like Optional[str])
+        # ##: Handle Optional types.
         elif hasattr(field_type, "__origin__") and field_type.__origin__ is Optional:
-            # Allow None or the inner type
             inner_type = field_type.__args__[0]
             if value is None or isinstance(value, inner_type):
                 mapped_data[field_name] = value
@@ -75,39 +70,29 @@ def _dict_to_dataclass(dataclass_type: Type[T], data: Dict[str, Any]) -> T:
                 logger.warning(
                     f"Incorrect type for optional field '{field_name}'. Expected {inner_type}, got {type(value)}."
                 )
-                # Decide how to handle type mismatch for Optional - maybe default to None?
-                mapped_data[field_name] = None  # Or raise error, or use default
+                mapped_data[field_name] = None
         else:
-            # Basic type conversion/assignment
-            try:
-                # Attempt direct assignment or basic type casting if needed
-                if not isinstance(value, field_type):
-                    # Basic casting for common types if direct assignment fails type check
-                    # More robust casting might be needed for complex types
-                    try:
-                        mapped_data[field_name] = field_type(value)
-                    except (TypeError, ValueError):
-                        logger.warning(
-                            f"Type mismatch for '{field_name}'. Expected {field_type}, got {type(value)}. Using value as is."
-                        )
-                        mapped_data[field_name] = value  # Assign anyway, let dataclass validation handle it
-                else:
+            # ##: Basic type conversion/assignment.
+            if not isinstance(value, field_type):
+                try:
+                    mapped_data[field_name] = field_type(value)
+                except (TypeError, ValueError):
+                    logger.warning(
+                        f"Type mismatch for '{field_name}'."
+                        f"Expected {field_type}, got {type(value)}"
+                        "Using value as is."
+                    )
                     mapped_data[field_name] = value
-            except Exception as e:
-                logger.error(f"Error processing field '{field_name}' with value '{value}': {e}")
-                # Decide how to handle: skip field, use default, raise error?
-                # Skipping for now, relying on dataclass defaults/validation
-                pass
+            else:
+                mapped_data[field_name] = value
 
-    # Instantiate the dataclass with potentially missing fields relying on defaults
+    # ##: Instantiate the dataclass with potentially missing fields relying on defaults.
     try:
-        # Filter mapped_data to only include keys that are actual fields
         valid_keys = {f.name for f in dataclasses.fields(dataclass_type)}
         filtered_data = {k: v for k, v in mapped_data.items() if k in valid_keys}
         return dataclass_type(**filtered_data)
     except TypeError as e:
         logger.error(f"Error instantiating {dataclass_type.__name__}: {e}. Check config structure and types.")
-        # Provide more context about missing required fields if possible
         missing_fields = []
         for f in dataclasses.fields(dataclass_type):
             if (
@@ -126,8 +111,7 @@ def load_config(
     args: Optional[argparse.Namespace] = None,
 ) -> MainConfig:
     """
-    Loads configuration from a YAML file, applies command-line overrides,
-    and returns a validated MainConfig object.
+    Loads configuration from a YAML file, applies command-line overrides, and returns a validated MainConfig object.
 
     Args:
         config_path: Path to the YAML configuration file.
@@ -169,7 +153,7 @@ def load_config(
             "steps_per_update": ("training", "steps_per_update"),
             "lr": ("ppo", "learning_rate"),
             "gamma": ("ppo", "gamma"),
-            "lam": ("ppo", "lambda_gae"),  # Note the mapping from 'lam' to 'lambda_gae'
+            "lam": ("ppo", "lambda_gae"),
             "clip": ("ppo", "clip_param"),
             "entropy": ("ppo", "entropy_coef"),
             "vf_coef": ("ppo", "value_coef"),
@@ -184,20 +168,16 @@ def load_config(
         for arg_name, (section, config_key) in arg_map.items():
             if hasattr(args, arg_name) and getattr(args, arg_name) is not None:
                 override_value = getattr(args, arg_name)
-                # Handle potential name mapping for fields like lambda
                 if config_key == "lambda_gae":
-                    yaml_name = "lambda"  # Check metadata if needed, but hardcoding is fine here
                     for field in dataclasses.fields(MainConfig.ppo.__class__):
                         if field.name == "lambda_gae":
                             yaml_name = field.metadata.get("yaml_name", "lambda_gae")
                             break
-                    # Update the correct key in the dictionary
                     if section in config_dict and isinstance(config_dict[section], dict):
-                        config_dict[section][yaml_name] = override_value  # Use yaml name for dict update
+                        config_dict[section][yaml_name] = override_value
                         logger.debug(f"Overriding {section}.{yaml_name} with CLI value: {override_value}")
 
                 elif section in config_dict and isinstance(config_dict[section], dict):
-                    # Find the correct key (might differ from dataclass field name due to metadata)
                     target_key = config_key
                     dataclass_section = getattr(MainConfig, section, None)
                     if dataclass_section and hasattr(dataclass_section, "__dataclass_fields__"):
@@ -208,10 +188,9 @@ def load_config(
                     config_dict[section][target_key] = override_value
                     logger.debug(f"Overriding {section}.{target_key} with CLI value: {override_value}")
 
-    # 5. Convert the final merged dictionary to the MainConfig dataclass structure
+    # ##: 5. Convert the final merged dictionary to the MainConfig dataclass structure.
     try:
         final_config = _dict_to_dataclass(MainConfig, config_dict)
-        # Trigger post-init validation
         final_config.__post_init__()
         logger.success("Configuration loaded and validated successfully.")
         return final_config
