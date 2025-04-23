@@ -18,7 +18,25 @@ T = TypeVar("T")
 
 
 def _load_yaml(path: Path) -> Dict[str, Any]:
-    """Loads a YAML file."""
+    """
+    Load configuration data from a YAML file.
+
+    Parameters
+    ----------
+    path : Path
+        The path to the YAML file.
+
+    Returns
+    -------
+    Dict[str, Any]
+        A dictionary containing the loaded configuration data.
+        Returns an empty dictionary if the YAML file is empty.
+
+    Raises
+    ------
+    SystemExit
+        If the specified path does not point to a file or if there is an error parsing the YAML content.
+    """
     if not path.is_file():
         logger.error(f"Configuration file not found: {path}")
         sys.exit(1)
@@ -31,7 +49,24 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
 
 
 def _map_yaml_to_dataclass_field(dataclass_type: Type[Any], yaml_key: str) -> str:
-    """Maps a YAML key to a dataclass field name using metadata if necessary."""
+    """
+    Map a YAML key to its corresponding dataclass field name.
+
+    Checks if a field in the dataclass has a 'yaml_name' metadata attribute matching the provided `yaml_key`.
+    If a match is found, the field's actual name is returned. Otherwise, the original `yaml_key` is returned.
+
+    Parameters
+    ----------
+    dataclass_type : Type[Any]
+        The dataclass type to inspect for field metadata.
+    yaml_key : str
+        The key name as it appears in the YAML configuration.
+
+    Returns
+    -------
+    str
+        The corresponding dataclass field name, or the original `yaml_key` if no mapping is found in the metadata.
+    """
     for field in dataclasses.fields(dataclass_type):
         if field.metadata.get("yaml_name") == yaml_key:
             return field.name
@@ -39,7 +74,33 @@ def _map_yaml_to_dataclass_field(dataclass_type: Type[Any], yaml_key: str) -> st
 
 
 def _dict_to_dataclass(dataclass_type: Type[T], data: Dict[str, Any]) -> T:
-    """Recursively converts a dictionary to a nested dataclass structure."""
+    """
+    Recursively convert a dictionary to a nested dataclass structure.
+
+    This function takes a dictionary and attempts to map its keys and values to the fields of the
+    specified dataclass type. It handles nested dataclasses, optional types, and basic type conversions.
+    It logs warnings for unknown keys or type mismatches.
+
+    Parameters
+    ----------
+    dataclass_type : Type[T]
+        The target dataclass type (or nested dataclass type) to instantiate.
+    data : Dict[str, Any]
+        The dictionary containing data to populate the dataclass instance.
+        Keys may be mapped using `_map_yaml_to_dataclass_field`.
+
+    Returns
+    -------
+    T
+        An instance of `dataclass_type` populated with data from the input dictionary.
+        Fields not present in the dictionary will use their default values if defined.
+
+    Raises
+    ------
+    SystemExit
+        If instantiation fails due to missing required fields (those without defaults)
+        or other `TypeError` during instantiation.
+    """
     field_types = {f.name: f.type for f in dataclasses.fields(dataclass_type)}
     mapped_data = {}
 
@@ -111,19 +172,37 @@ def load_config(
     args: Optional[argparse.Namespace] = None,
 ) -> MainConfig:
     """
-    Loads configuration from a YAML file, applies command-line overrides, and returns a validated MainConfig object.
+    Load configuration from YAML and CLI overrides.
 
-    Args:
-        config_path: Path to the YAML configuration file.
-        args: Parsed command-line arguments (optional).
+    Loads configuration settings starting from the defaults defined in the `MainConfig` dataclass.
+    It then merges settings from a specified YAML file (if provided) and finally applies any
+    overrides specified through command-line arguments. The resulting configuration is validated
+    before being returned.
 
-    Returns:
-        A populated and validated MainConfig object.
+    Parameters
+    ----------
+    config_path : str, optional
+        Path to the YAML configuration file. If None, only default settings and command-line overrides are used.
+        Default is None.
+    args : argparse.Namespace, optional
+        Parsed command-line arguments. If provided, these arguments can override settings from the YAML
+        file or defaults. Default is None.
+
+    Returns
+    -------
+    MainConfig
+        A populated and validated instance of the `MainConfig` dataclass, representing the final configuration settings.
+
+    Raises
+    ------
+    SystemExit
+        If the configuration file is not found (via `_load_yaml`), cannot be parsed (via `_load_yaml`), or if the final
+        configuration fails validation or instantiation (via `_dict_to_dataclass` or `__post_init__`).
     """
-    # 1. Start with default config from dataclass definitions
+    # ##: 1. Start with default config from dataclass definitions.
     config_dict = dataclasses.asdict(MainConfig())
 
-    # 2. Load from YAML file if provided
+    # ##: 2. Load from YAML file if provided.
     yaml_config = {}
     if config_path:
         logger.info(f"Loading configuration from: {config_path}")
@@ -131,23 +210,18 @@ def load_config(
     else:
         logger.info("No config file specified, using default settings.")
 
-    # 3. Merge YAML config into the default config dictionary (deep merge might be needed for nested dicts)
-    # Basic merge for top-level keys (environment, training, ppo, logging)
+    # ##: 3. Merge YAML config into the default config dictionary (deep merge might be needed for nested dicts).
     for key, value in yaml_config.items():
         if key in config_dict and isinstance(value, dict) and isinstance(config_dict[key], dict):
-            # Merge nested dictionaries
             config_dict[key].update(value)
         elif key in config_dict:
-            # Overwrite top-level non-dict values (shouldn't happen with current structure)
             config_dict[key] = value
         else:
             logger.warning(f"Ignoring unknown top-level key '{key}' in YAML config.")
 
-    # 4. Apply command-line overrides if args are provided
+    # ##: 4. Apply command-line overrides if args are provided.
     if args:
         logger.info("Applying command-line overrides...")
-        # Map argparse dest names to config structure
-        # Example: args.lr -> config_dict['ppo']['learning_rate']
         arg_map = {
             "total_timesteps": ("training", "total_timesteps"),
             "steps_per_update": ("training", "steps_per_update"),
