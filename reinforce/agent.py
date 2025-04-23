@@ -14,7 +14,7 @@ from loguru import logger
 
 from . import setup_logger
 from .buffer import Buffer
-from .network import build_policy_network, build_value_network
+from .network import build_actor_critic_networks
 from .ppo import get_action_distribution, train_step
 
 setup_logger()
@@ -90,8 +90,7 @@ class PPOAgent:
         self.batch_size = batch_size
 
         # ##: Build networks.
-        self.policy_network = build_policy_network(self.input_shape, self.num_actions)
-        self.value_network = build_value_network(self.input_shape)
+        self.policy_network, self.value_network = build_actor_critic_networks(self.input_shape, self.num_actions)
 
         # ##: Setup optimizers.
         self.policy_optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)

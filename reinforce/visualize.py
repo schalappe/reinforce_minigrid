@@ -122,7 +122,6 @@ def evaluate_and_render(model_path_prefix: str, output_gif_path: str, seed: int,
             frame = env.render()
             frames.append(frame)
 
-
     env.close()
     logger.info("Environment closed.")
 
