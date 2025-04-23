@@ -3,10 +3,10 @@
 Script to evaluate a trained PPO agent in the MiniGrid Maze environment and save the rendering as a GIF.
 """
 
-import argparse
 import os
 import random
 
+import click
 import imageio
 import numpy as np
 import tensorflow as tf
@@ -18,7 +18,38 @@ from reinforce import setup_logger
 from reinforce.agent import PPOAgent
 
 
-def evaluate_and_render(model_path_prefix: str, output_gif_path: str, seed: int = 42, max_steps: int = 256):
+@click.command()
+@click.option(
+    "--model-prefix",
+    "model_path_prefix",
+    type=click.Path(exists=False),
+    default="../models/ppo_maze_final",
+    help="Path prefix for loading the policy and value models.",
+    show_default=True,
+)
+@click.option(
+    "--output-gif",
+    "output_gif_path",
+    type=click.Path(exists=False),
+    default="evaluation_render.gif",
+    help="Path to save the output GIF file.",
+    show_default=True,
+)
+@click.option(
+    "--seed",
+    type=int,
+    default=random.randint(0, 1_000_000),
+    help="Random seed for environment and agent.",
+    show_default="random",
+)
+@click.option(
+    "--max-steps",
+    type=int,
+    default=1000,
+    help="Maximum number of steps per evaluation episode.",
+    show_default=True,
+)
+def evaluate_and_render(model_path_prefix: str, output_gif_path: str, seed: int, max_steps: int):
     """
     Loads a PPO agent, runs it in the Maze environment, and saves a GIF.
 
@@ -29,9 +60,9 @@ def evaluate_and_render(model_path_prefix: str, output_gif_path: str, seed: int 
     output_gif_path : str
         Path where the output GIF file will be saved.
     seed : int, optional
-        Random seed for reproducibility. Default is 42.
+        Random seed for reproducibility.
     max_steps : int, optional
-        Maximum number of steps per episode evaluation. Default is 256.
+        Maximum number of steps per episode evaluation.
     """
     setup_logger()
     logger.info(f"Starting evaluation with model prefix: {model_path_prefix}")
@@ -109,40 +140,5 @@ def evaluate_and_render(model_path_prefix: str, output_gif_path: str, seed: int 
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Evaluate a PPO agent in MiniGrid Maze and save a GIF.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument(
-        "--model-prefix",
-        type=str,
-        default="../models/ppo_maze_final",
-        help="Path prefix for loading the policy and value models.",
-    )
-    parser.add_argument(
-        "--output-gif",
-        type=str,
-        default="evaluation_render.gif",
-        help="Path to save the output GIF file.",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=random.randint(0, 1_000_000),
-        help="Random seed for environment and agent.",
-    )
-    parser.add_argument(
-        "--max-steps",
-        type=int,
-        default=1000,
-        help="Maximum number of steps per evaluation episode.",
-    )
-
-    args = parser.parse_args()
-
-    evaluate_and_render(
-        model_path_prefix=args.model_prefix,
-        output_gif_path=args.output_gif,
-        seed=args.seed,
-        max_steps=args.max_steps,
-    )
+    # pylint: disable=no-value-for-parameter
+    evaluate_and_render()
