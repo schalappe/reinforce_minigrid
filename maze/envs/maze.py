@@ -17,21 +17,22 @@ class Maze(RoomGridLevel):
     """
     A maze environment with a goal.
 
-    The agent starts at a random position and must navigate a 3x3 grid of rooms (each 8x8 cells) to
-    reach a green ball. Doors connect the rooms.
+    The agent starts at a random position and must navigate a grid of rooms
+    (defined by `num_rows` and `num_cols`, each `room_size` x `room_size` cells)
+    to reach a green ball. Doors connect the rooms.
 
     Parameters
     ----------
     num_rows : int, optional
-        Number of rows of rooms. Default is 3.
+        Number of rows of rooms (default is 3).
     num_cols : int, optional
-        Number of columns of rooms. Default is 3.
+        Number of columns of rooms (default is 3).
     room_size : int, optional
-        Size of each room (width and height). Default is 8.
+        Size (width and height) of each room (default is 8).
     num_dists : int, optional
-        Number of distractor objects to place. Default is 1.
+        Number of distractor objects to place (default is 1).
     doors_open : bool, optional
-        If True, all doors in the maze start open. Default is False.
+        If True, all doors in the maze start open (default is False).
     **kwargs
         Additional keyword arguments passed to the `RoomGridLevel` constructor.
     """
@@ -51,15 +52,15 @@ class Maze(RoomGridLevel):
         Parameters
         ----------
         num_rows : int, optional
-            Number of rows of rooms. Default is 3.
+            Number of rows of rooms (default is 3).
         num_cols : int, optional
-            Number of columns of rooms. Default is 3.
+            Number of columns of rooms (default is 3).
         room_size : int, optional
-            Size of each room (width and height). Default is 8.
+            Size (width and height) of each room (default is 8).
         num_dists : int, optional
-            Number of distractor objects to place. Default is 1.
+            Number of distractor objects to place (default is 1).
         doors_open : bool, optional
-            If True, all doors in the maze start open. Default is False.
+            If True, all doors in the maze start open (default is False).
         **kwargs
             Additional keyword arguments passed to the `RoomGridLevel` constructor.
         """
@@ -99,8 +100,8 @@ class Maze(RoomGridLevel):
         """
         Calculate the reward based on the agent's current state.
 
-        The reward encourages moving towards the goal, exploring new cells, entering rooms closer
-        to the goal room, and penalizes steps taken.
+        The reward encourages moving towards the goal, exploring new cells,
+        entering rooms closer to the goal room, and penalizes steps taken.
 
         Returns
         -------
@@ -111,9 +112,12 @@ class Maze(RoomGridLevel):
         -----
         Reward components:
         - Goal Reached: +10.0 if agent is at the goal position.
-        - Progress Reward: +0.1 * (previous_distance - current_distance). Positive if closer.
-        - Room Transition Reward: +0.5 if agent moves into a room closer to the goal room.
-        - Exploration Penalty: -0.01 * min(visits - 1, 10). Penalizes revisiting cells.
+        - Progress Reward: +0.1 * (previous_distance - current_distance).
+          Positive if closer.
+        - Room Transition Reward: +0.5 if agent moves into a room closer
+          to the goal room.
+        - Exploration Penalty: -0.01 * min(visits - 1, 10). Penalizes
+          revisiting cells (capped).
         - Step Penalty: -0.01 for each step taken.
         """
         self.visited[self.agent_pos] = self.visited.get(self.agent_pos, 0) + 1
@@ -164,13 +168,16 @@ class Maze(RoomGridLevel):
 
         Returns
         -------
-        Tuple[object, SupportsFloat, bool, bool, Dict[str, Any]]
-            A tuple containing:
-            - obs (object): The agent's observation of the current environment.
-            - reward (SupportsFloat): Amount of reward returned after previous action.
-            - terminated (bool): Whether the episode has ended (e.g., goal reached).
-            - truncated (bool): Whether the episode was ended prematurely (e.g., time limit).
-            - info (Dict[str, Any]): Contains auxiliary diagnostic information.
+        obs : object
+            The agent's observation of the current environment.
+        reward : SupportsFloat
+            Amount of reward returned after previous action.
+        terminated : bool
+            Whether the episode has ended (e.g., goal reached).
+        truncated : bool
+            Whether the episode was ended prematurely (e.g., time limit).
+        info : Dict[str, Any]
+            Contains auxiliary diagnostic information.
         """
         obs, _, terminated, truncated, info = super().step(action)
         reward = self.reward()
@@ -197,12 +204,8 @@ class Maze(RoomGridLevel):
         """
         Generate a new mission (episode).
 
-        Sets up the environment for a new episode by:
-        1. Placing the agent randomly.
-        2. Connecting all rooms with doors (potentially opening them).
-        3. Adding the goal object.
-        4. Generating the agent's instruction.
-        5. Initializing distance and room tracking variables.
+        Sets up the environment for a new episode by placing the agent, connecting rooms, adding the goal,
+        generating the instruction, and initializing tracking variables.
         """
         self.place_agent()
         self.connect_all()
@@ -219,3 +222,34 @@ class Maze(RoomGridLevel):
         self.goal_room = self.get_room_coords(self.goal_position[0], self.goal_position[1])
         self.room_transitions = 0
         self.visited = {}
+
+class BaseMaze(Maze):
+    """Simplest maze: 1x1 room."""
+    def __init__(self):
+        super().__init__(num_rows=1, num_cols=1, room_size=8, num_dists=0)
+
+
+class EasyMazeOne(Maze):
+    """Easy maze: 1x2 rooms, doors open."""
+    def __init__(self):
+        super().__init__(num_rows=1, num_cols=2, room_size=8, doors_open=True)
+
+class EasyMazeTwo(Maze):
+    """Easy maze: 1x2 rooms, doors closed."""
+    def __init__(self):
+        super().__init__(num_rows=1, num_cols=2, room_size=8, doors_open=False)
+
+class MediumMazeOne(Maze):
+    """Medium maze: 2x2 rooms, doors open."""
+    def __init__(self):
+        super().__init__(num_rows=2, num_cols=2, room_size=8, doors_open=True)
+
+class MediumMazeTwo(Maze):
+    """Medium maze: 2x2 rooms, doors closed."""
+    def __init__(self):
+        super().__init__(num_rows=2, num_cols=2, room_size=8, doors_open=False)
+
+class HardMaze(Maze):
+    """Hard maze: 3x3 rooms, doors closed."""
+    def __init__(self):
+        super().__init__(num_rows=3, num_cols=3, room_size=8, doors_open=False)
