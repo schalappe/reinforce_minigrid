@@ -11,6 +11,7 @@ import gymnasium as gym
 import numpy as np
 import tensorflow as tf
 from loguru import logger
+from pathlib import Path
 
 from . import setup_logger
 from .buffer import Buffer
@@ -259,11 +260,11 @@ class PPOAgent:
         Exception
             Catches and prints exceptions during file loading (e.g., file not found).
         """
-        policy_path = f"{path_prefix}_policy.keras"
-        value_path = f"{path_prefix}_value.keras"
+        policy_path = Path(f"{path_prefix}_policy.keras")
+        value_path = Path(f"{path_prefix}_value.keras")
         try:
             self.policy_network = tf.keras.models.load_model(policy_path)
             self.value_network = tf.keras.models.load_model(value_path)
-            print(f"Models loaded from {policy_path} and {value_path}")
+            logger.info(f"Models loaded from {policy_path} and {value_path}")
         except Exception as e:
-            print(f"Error loading models from {policy_path} and {value_path}: {e}.")
+            logger.warning(f"Error loading models from {policy_path} and {value_path}: {e}.")
