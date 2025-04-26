@@ -11,19 +11,27 @@ import imageio
 import numpy as np
 import tensorflow as tf
 from loguru import logger
-from minigrid.wrappers import FullyObsWrapper, ImgObsWrapper
+from typing import Dict, Callable
+from minigrid.wrappers import ImgObsWrapper
 
-from maze.envs import Maze
+from maze.envs import BaseMaze, EasyMaze, MediumMaze, HardMaze
 from reinforce import setup_logger
 from reinforce.agent import PPOAgent
 
+
+ENVS: Dict[str, Callable] = {
+    "base": BaseMaze,
+    "easy": EasyMaze,
+    "medium": MediumMaze,
+    "hard": HardMaze,
+}
 
 @click.command()
 @click.option(
     "--model-prefix",
     "model_path_prefix",
     type=click.Path(exists=False),
-    default="../models/ppo_maze_final",
+    default="./models/ppo_maze",
     help="Path prefix for loading the policy and value models.",
     show_default=True,
 )
@@ -49,7 +57,14 @@ from reinforce.agent import PPOAgent
     help="Maximum number of steps per evaluation episode.",
     show_default=True,
 )
-def evaluate_and_render(model_path_prefix: str, output_gif_path: str, seed: int, max_steps: int):
+@click.option(
+    "--level",
+    type=click.Choice(["base", "easy", "medium", "hard"]),
+    default="easy",
+    help="Difficulty level of the maze.",
+    show_default=True,
+)
+def evaluate_and_render(model_path_prefix: str, output_gif_path: str, seed: int, max_steps: int, level: str):
     """
     Loads a PPO agent, runs it in the Maze environment, and saves a GIF.
 
@@ -75,7 +90,7 @@ def evaluate_and_render(model_path_prefix: str, output_gif_path: str, seed: int,
     random.seed(seed)
 
     # ##: Create environment with RGB array rendering.
-    env = ImgObsWrapper(FullyObsWrapper(Maze(render_mode="rgb_array")))
+    env = ImgObsWrapper(ENVS[level](render_mode="rgb_array"))
     logger.info("Successfully created environment.")
 
     # ##: Initialize agent.
