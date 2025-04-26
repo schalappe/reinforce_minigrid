@@ -13,7 +13,7 @@ import numpy as np
 import tensorflow as tf
 from gymnasium import Env
 from loguru import logger
-from minigrid.wrappers import FullyObsWrapper, ImgObsWrapper
+from minigrid.wrappers import ImgObsWrapper
 
 from maze.envs.base_maze import BaseMaze
 from maze.envs.easy_maze import EasyMaze
@@ -47,7 +47,7 @@ def create_env(env_class: Callable[..., Any]) -> Env:
     env : gym.Env
         The wrapped environment.
     """
-    env = ImgObsWrapper(FullyObsWrapper(env_class()))
+    env = ImgObsWrapper(env_class(render_mode="rgb_array"))
     return env
 
 
