@@ -27,8 +27,8 @@ from .config import MainConfig, load_config
 # ##: Define the curriculum
 CURRICULUM = [
     {"name": "BaseMaze", "env_class": BaseMaze, "threshold": 0.5, "max_steps": 500_000},
-    {"name": "EasyMaze", "env_class": EasyMaze, "threshold": 1.0, "max_steps": 1_000_000},
-    {"name": "MediumMaze", "env_class": MediumMaze, "threshold": 2.0, "max_steps": 2_000_000},
+    {"name": "EasyMaze", "env_class": EasyMaze, "threshold": 1.0, "max_steps": 500_000},
+    {"name": "MediumMaze", "env_class": MediumMaze, "threshold": 2.0, "max_steps": 1_000_000},
     {"name": "HardMaze", "env_class": HardMaze, "threshold": None, "max_steps": None},
 ]
 

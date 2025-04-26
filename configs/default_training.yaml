@@ -4,16 +4,16 @@ environment:
   seed: 42
 
 training:
-  total_timesteps: 1000000
+  total_timesteps: 3000000
   steps_per_update: 2048
 
 ppo:
   learning_rate: 3.0e-4
   gamma: 0.99
-  lambda: 0.95  # Corresponds to lambda_gae in the dataclass
+  lambda: 0.95
   clip_param: 0.2
   entropy_coef: 0.01
-  vf_coef: 0.5   # Corresponds to value_coef in the dataclass
+  vf_coef: 0.5
   epochs: 10
   batch_size: 64
 
@@ -21,4 +21,4 @@ logging:
   log_interval: 1
   save_interval: 10
   save_path: "models/ppo_maze"
-  load_path: null # Set to a path like "models/ppo_maze" to load a pre-trained model
+  load_path: null
