@@ -145,7 +145,5 @@ dmypy.json
 cython_debug/
 
 # Special repositories
-zoo/
-outputs/
-.aim/
+.roo
 models/

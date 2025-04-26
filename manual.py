@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Script to try ``MiniGrid``.
+Manual Control Script for MiniGrid Maze Environment.
 
-This script allows users to manually control an agent in a MiniGrid maze environment. It provides a graphical
-interface where users can navigate through a maze using keyboard controls.
+This script provides an interface for users to manually control an agent within a MiniGrid maze
+environment using keyboard inputs.
+
+Functions
+---------
+show_helper()
+    Displays available keyboard actions in the console.
 """
 
 import random
@@ -14,15 +19,14 @@ from rich.table import Table
 
 def show_helper():
     """
-    Print in console available actions.
+    Display Available Keyboard Actions.
 
-    This function creates and displays a formatted table showing all keyboard controls and their corresponding
-    actions in the MiniGrid environment.
+    Prints a formatted table to the console listing the keyboard controls and their corresponding
+    actions within the MiniGrid environment.
 
     Notes
     -----
-    Uses the rich library to create a visually appealing console output with a table displaying key mappings for
-    the MiniGrid environment.
+    Utilizes the `rich` library to generate a visually appealing table for displaying key mappings.
     """
     print(64 * "-")
     table = Table(title="Available actions:")
@@ -48,35 +52,14 @@ def show_helper():
 
 
 if __name__ == "__main__":
-    """
-    Main execution block.
-
-    This block is executed when the script is run directly (not imported as a module). It handles command-line
-    arguments and launches either the help display or the interactive MiniGrid environment.
-
-    Parameters
-    ----------
-    --action : bool, optional
-        Flag to display available actions instead of launching the game. Default is ``False``.
-
-    Examples
-    --------
-    Display the action helper:
-
-    >>> python manual.py --action
-
-    Launch the interactive MiniGrid environment:
-
-    >>> python manual.py
-    """
-    import argparse
+    from argparse import ArgumentParser
 
     from minigrid.manual_control import ManualControl
 
-    from maze.envs import Maze
+    from maze.envs import HardMaze
 
     # ##: Parser.
-    parser = argparse.ArgumentParser(description="Manual control interface for MiniGrid maze environments")
+    parser = ArgumentParser(description="Manual control interface for MiniGrid maze environments")
     parser.add_argument(
         "--action",
         action="store_true",
@@ -89,7 +72,7 @@ if __name__ == "__main__":
         show_helper()
     else:
         # ##: Load environment.
-        mini_grid = Maze(render_mode="human")
+        mini_grid = HardMaze(render_mode="human")
 
         # ##: Play MiniGrid.
         manual_control = ManualControl(env=mini_grid, seed=random.seed())

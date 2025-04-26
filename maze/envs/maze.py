@@ -120,7 +120,7 @@ class Maze(RoomGridLevel):
         """
         # ##: Check for wall collision.
         wall_collision_penalty = 0
-        if hasattr(self, 'last_action_hit_wall') and self.last_action_hit_wall:
+        if hasattr(self, "last_action_hit_wall") and self.last_action_hit_wall:
             wall_collision_penalty = -0.5
 
         # ##: Check if goal is reached.
@@ -178,7 +178,7 @@ class Maze(RoomGridLevel):
         obs, _, terminated, truncated, info = super().step(action)
 
         # ##: Check if position changed after the step.
-        self.last_action_hit_wall = (self.agent_pos == prev_pos)
+        self.last_action_hit_wall = self.agent_pos == prev_pos
 
         # ##: Calculate reward using the updated logic.
         reward = self.reward()

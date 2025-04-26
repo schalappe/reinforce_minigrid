@@ -5,19 +5,18 @@ Script to evaluate a trained PPO agent in the MiniGrid Maze environment and save
 
 import os
 import random
+from typing import Callable, Dict
 
 import click
 import imageio
 import numpy as np
 import tensorflow as tf
 from loguru import logger
-from typing import Dict, Callable
 from minigrid.wrappers import ImgObsWrapper
 
-from maze.envs import BaseMaze, EasyMaze, MediumMaze, HardMaze
+from maze.envs import BaseMaze, EasyMaze, HardMaze, MediumMaze
 from reinforce import setup_logger
 from reinforce.agent import PPOAgent
-
 
 ENVS: Dict[str, Callable] = {
     "base": BaseMaze,
@@ -25,6 +24,7 @@ ENVS: Dict[str, Callable] = {
     "medium": MediumMaze,
     "hard": HardMaze,
 }
+
 
 @click.command()
 @click.option(

@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Register environment."""
+"""
+Maze Environment Registration.
+
+This module registers the custom Maze environment with Gymnasium, making it available
+for use through `gymnasium.make()`.
+"""
 
 from gymnasium.envs.registration import register
 
