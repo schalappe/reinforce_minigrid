@@ -10,7 +10,7 @@ from .maze import Maze
 
 class BaseMaze(Maze):
     """
-    A simple 1x2 room maze with open doors.
+    A simple 2x2 room maze with open doors.
 
     Inherits from the main Maze class but simplifies the layout.
     """
@@ -27,7 +27,7 @@ class BaseMaze(Maze):
             Additional keyword arguments passed to the parent Maze constructor.
         """
         super().__init__(
-            num_rows=1,
+            num_rows=2,
             num_cols=2,
             room_size=room_size,
             doors_open=True,

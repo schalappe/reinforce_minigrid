@@ -15,7 +15,7 @@ class MediumMaze(Maze):
     This uses the default configuration of the parent Maze class.
     """
 
-    def __init__(self, room_size: int = 8, doors_open: bool = False, **kwargs):
+    def __init__(self, room_size: int = 8, **kwargs):
         """
         Initialize the MediumMaze environment.
 
@@ -23,8 +23,6 @@ class MediumMaze(Maze):
         ----------
         room_size : int, optional
             Size (width and height) of each room (default is 8).
-        doors_open : bool, optional
-            If True, all doors in the maze start open (default is False).
         **kwargs
             Additional keyword arguments passed to the parent Maze constructor.
         """
@@ -32,7 +30,7 @@ class MediumMaze(Maze):
             num_rows=3,
             num_cols=3,
             room_size=room_size,
-            doors_open=doors_open,
+            doors_open=False,
             num_dists=0,
             **kwargs,
         )

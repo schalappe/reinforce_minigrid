@@ -118,32 +118,32 @@ class Maze(RoomGridLevel):
         - Wall Collision Penalty: -0.5 if the agent's last action resulted in hitting a wall.
         - Step Penalty: -0.01 for each step taken.
         """
-        # ##: Check for wall collision
+        # ##: Check for wall collision.
         wall_collision_penalty = 0
         if hasattr(self, 'last_action_hit_wall') and self.last_action_hit_wall:
-            wall_collision_penalty = -0.5 # Penalize hitting a wall
+            wall_collision_penalty = -0.5
 
-        # ##: Check if goal is reached
+        # ##: Check if goal is reached.
         distance = abs(self.goal_position[1] - self.agent_pos[1]) + abs(self.goal_position[0] - self.agent_pos[0])
         if distance == 0:
-            return 10.0  # Large reward for reaching the goal
+            return 10.0
 
-        # ##: Calculate progress towards goal
+        # ##: Calculate progress towards goal.
         previous_distance = self.distance if self.distance is not None else distance
         self.distance = distance
         progress_reward = (previous_distance - distance) * 0.1
 
-        # ##: Calculate exploration bonus
+        # ##: Calculate exploration bonus.
         exploration_bonus = 0
         visit_count = self.visited.get(self.agent_pos, 0)
         if visit_count == 0:
-            exploration_bonus = 0.05 # Reward for visiting a new cell
+            exploration_bonus = 0.05
         self.visited[self.agent_pos] = visit_count + 1
 
-        # ##: Standard step penalty
+        # ##: Standard step penalty.
         step_penalty = -0.01
 
-        # ##: Combine reward components
+        # ##: Combine reward components.
         total_reward = progress_reward + exploration_bonus + step_penalty + wall_collision_penalty
 
         return total_reward
@@ -172,15 +172,15 @@ class Maze(RoomGridLevel):
         info : Dict[str, Any]
             Contains auxiliary diagnostic information.
         """
-        # ##: Store position before taking the step
+        # ##: Store position before taking the step.
         prev_pos = self.agent_pos
 
         obs, _, terminated, truncated, info = super().step(action)
 
-        # ##: Check if position changed after the step
+        # ##: Check if position changed after the step.
         self.last_action_hit_wall = (self.agent_pos == prev_pos)
 
-        # ##: Calculate reward using the updated logic
+        # ##: Calculate reward using the updated logic.
         reward = self.reward()
 
         return obs, reward, terminated, truncated, info
