@@ -107,7 +107,7 @@ def _dict_to_dataclass(dataclass_type: Type[T], data: Dict[str, Any]) -> T:
     for yaml_key, value in data.items():
         field_name = _map_yaml_to_dataclass_field(dataclass_type, yaml_key)
         if field_name not in field_types:
-            logger.warning(f"Ignoring unknown config key '{yaml_key}' in section '{dataclass_type.__name__}'")
+            logger.warning(f'Ignoring unknown config key "{yaml_key}" in section "{dataclass_type.__name__}"')
             continue
 
         field_type = field_types[field_name]
@@ -118,7 +118,7 @@ def _dict_to_dataclass(dataclass_type: Type[T], data: Dict[str, Any]) -> T:
                 mapped_data[field_name] = _dict_to_dataclass(field_type, value)
             else:
                 logger.warning(
-                    f"Expected dict for nested config '{field_name}' ({field_type.__name__}), "
+                    f'Expected dict for nested config "{field_name}" ({field_type.__name__}), '
                     f"got {type(value)}. Using defaults."
                 )
                 mapped_data[field_name] = field_type()
@@ -129,7 +129,7 @@ def _dict_to_dataclass(dataclass_type: Type[T], data: Dict[str, Any]) -> T:
                 mapped_data[field_name] = value
             else:
                 logger.warning(
-                    f"Incorrect type for optional field '{field_name}'. Expected {inner_type}, got {type(value)}."
+                    f'Incorrect type for optional field "{field_name}". Expected {inner_type}, got {type(value)}.'
                 )
                 mapped_data[field_name] = None
         else:
@@ -139,9 +139,9 @@ def _dict_to_dataclass(dataclass_type: Type[T], data: Dict[str, Any]) -> T:
                     mapped_data[field_name] = field_type(value)
                 except (TypeError, ValueError):
                     logger.warning(
-                        f"Type mismatch for '{field_name}'."
-                        f"Expected {field_type}, got {type(value)}"
-                        "Using value as is."
+                        f'Type mismatch for "{field_name}". '
+                        f"Expected {field_type}, got {type(value)}. "
+                        f"Using value as is."
                     )
                     mapped_data[field_name] = value
             else:
@@ -163,7 +163,8 @@ def _dict_to_dataclass(dataclass_type: Type[T], data: Dict[str, Any]) -> T:
             ):
                 missing_fields.append(f.name)
         if missing_fields:
-            logger.error(f"Missing required fields without defaults: {', '.join(missing_fields)}")
+            separator = ", "
+            logger.error(f"Missing required fields without defaults: {separator.join(missing_fields)}")
         sys.exit(1)
 
 
@@ -217,7 +218,7 @@ def load_config(
         elif key in config_dict:
             config_dict[key] = value
         else:
-            logger.warning(f"Ignoring unknown top-level key '{key}' in YAML config.")
+            logger.warning(f"Ignoring unknown top-level key {key} in YAML config.")
 
     # ##: 4. Apply command-line overrides if args are provided.
     if args:

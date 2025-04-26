@@ -101,8 +101,8 @@ def evaluate_and_render(model_path_prefix: str, output_gif_path: str, seed: int,
     try:
         agent.load_models(model_path_prefix)
         logger.info("Models loaded successfully.")
-    except Exception as e:
-        logger.error(f"Failed to load models: {e}")
+    except (FileNotFoundError, tf.errors.OpError) as exc:
+        logger.error(f"Failed to load models: {exc}")
         env.close()
         return
 
@@ -149,8 +149,8 @@ def evaluate_and_render(model_path_prefix: str, output_gif_path: str, seed: int,
 
         imageio.mimsave(output_gif_path, frames, fps=10)
         logger.info("GIF saved successfully.")
-    except Exception as e:
-        logger.error(f"Failed to save GIF: {e}")
+    except (OSError, ValueError) as exc:
+        logger.error(f"Failed to save GIF: {exc}")
 
 
 if __name__ == "__main__":

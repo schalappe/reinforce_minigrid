@@ -84,7 +84,8 @@ def train(config: MainConfig):
     # ##: Curriculum setup.
     current_curriculum_index = 0
     current_stage = CURRICULUM[current_curriculum_index]
-    logger.info(f"Starting curriculum stage 1: {current_stage['name']}")
+    stage_name = current_stage["name"]
+    logger.info(f"Starting curriculum stage 1: {stage_name}")
     env = create_env(current_stage["env_class"])
 
     # ##: Initialize agent.
@@ -130,10 +131,11 @@ def train(config: MainConfig):
     logger.info("Starting training loop...")
     while total_steps_overall < config.training.total_timesteps:
         update_cycle += 1
+        stage_name = current_stage["name"]
         logger.debug(
             f"Update Cycle {update_cycle} | "
             f"Overall Timestep {total_steps_overall}/{config.training.total_timesteps} | "
-            f"Stage: {current_stage['name']}"
+            f"Stage: {stage_name}"
         )
 
         last_obs_for_bootstrap = None
@@ -167,9 +169,10 @@ def train(config: MainConfig):
                 total_episodes += 1
                 reward_deque.append(episode_reward)
                 length_deque.append(episode_length)
+                stage_name = current_stage["name"]
                 logger.debug(
                     f"Episode {total_episodes} finished. Reward: {episode_reward:.2f}, "
-                    f"Length: {episode_length}, Stage: {current_stage['name']}"
+                    f"Length: {episode_length}, Stage: {stage_name}"
                 )
 
                 # ##: Store last observation only if episode ended due to truncation.
@@ -187,23 +190,23 @@ def train(config: MainConfig):
                     stage_threshold = current_stage["threshold"]
                     stage_max_steps = current_stage["max_steps"]
                     advance_curriculum = False
+                    stage_name = current_stage["name"]
 
                     if stage_threshold is not None and mean_reward >= stage_threshold:
                         logger.info(
-                            f"Stage {current_stage['name']} threshold ({stage_threshold}) met "
+                            f"Stage {stage_name} threshold ({stage_threshold}) met "
                             f"with avg reward {mean_reward:.2f}."
                         )
                         advance_curriculum = True
                     elif stage_max_steps is not None and steps_in_current_stage >= stage_max_steps:
-                        logger.info(f"Stage {current_stage['name']} max steps ({stage_max_steps}) reached.")
+                        logger.info(f"Stage {stage_name} max steps ({stage_max_steps}) reached.")
                         advance_curriculum = True
 
                     if advance_curriculum and current_curriculum_index < len(CURRICULUM) - 1:
                         current_curriculum_index += 1
                         current_stage = CURRICULUM[current_curriculum_index]
-                        logger.warning(
-                            f"Advancing to curriculum stage {current_curriculum_index + 1}: {current_stage['name']}"
-                        )
+                        stage_name = current_stage["name"]
+                        logger.warning(f"Advancing to curriculum stage {current_curriculum_index + 1}: {stage_name}")
                         env.close()
                         env = create_env(current_stage["env_class"])
 
@@ -234,9 +237,10 @@ def train(config: MainConfig):
             mean_length = np.mean(length_deque)
             elapsed_time = time.time() - start_time
             fps = int(total_steps_overall / elapsed_time) if elapsed_time > 0 else 0
+            stage_name = current_stage["name"]
             logger.info(
                 f"Timesteps: {total_steps_overall}/{config.training.total_timesteps} | "
-                f"Episodes: {total_episodes} | Stage: {current_stage['name']}"
+                f"Episodes: {total_episodes} | Stage: {stage_name}"
             )
             logger.info(
                 f"Mean Reward (last {reward_deque.maxlen}): {mean_reward:.2f} | "

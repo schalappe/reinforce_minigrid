@@ -266,5 +266,5 @@ class PPOAgent:
             self.policy_network = tf.keras.models.load_model(policy_path)
             self.value_network = tf.keras.models.load_model(value_path)
             logger.info(f"Models loaded from {policy_path} and {value_path}")
-        except Exception as e:
-            logger.warning(f"Error loading models from {policy_path} and {value_path}: {e}.")
+        except (FileNotFoundError, tf.errors.OpError, IOError) as exc:
+            logger.warning(f"Error loading models from {policy_path} and {value_path}: {exc}.")
