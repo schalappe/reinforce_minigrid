@@ -101,7 +101,7 @@ class Maze(RoomGridLevel):
         Calculate the reward based on the agent's current state.
 
         The reward encourages moving towards the goal, exploring new cells,
-        entering rooms closer to the goal room, and penalizes steps taken.
+        and penalizes steps taken and wall collisions.
 
         Returns
         -------
@@ -114,46 +114,39 @@ class Maze(RoomGridLevel):
         - Goal Reached: +10.0 if agent is at the goal position.
         - Progress Reward: +0.1 * (previous_distance - current_distance).
           Positive if closer.
-        - Room Transition Reward: +0.5 if agent moves into a room closer
-          to the goal room.
-        - Exploration Penalty: -0.01 * min(visits - 1, 10). Penalizes
-          revisiting cells (capped).
+        - Exploration Bonus: +0.05 if the agent enters a cell for the first time.
+        - Wall Collision Penalty: -0.5 if the agent's last action resulted in hitting a wall.
         - Step Penalty: -0.01 for each step taken.
         """
-        self.visited[self.agent_pos] = self.visited.get(self.agent_pos, 0) + 1
+        # ##: Check for wall collision
+        wall_collision_penalty = 0
+        if hasattr(self, 'last_action_hit_wall') and self.last_action_hit_wall:
+            wall_collision_penalty = -0.5 # Penalize hitting a wall
 
+        # ##: Check if goal is reached
         distance = abs(self.goal_position[1] - self.agent_pos[1]) + abs(self.goal_position[0] - self.agent_pos[0])
-
         if distance == 0:
-            return 10.0
+            return 10.0  # Large reward for reaching the goal
 
+        # ##: Calculate progress towards goal
         previous_distance = self.distance if self.distance is not None else distance
         self.distance = distance
-
-        # ##: Reward for getting closer to the goal.
         progress_reward = (previous_distance - distance) * 0.1
 
-        new_room = self.get_room_coords(self.agent_pos[0], self.agent_pos[1])
-        goal_room = self.get_room_coords(self.goal_position[0], self.goal_position[1])
-
-        # ##: Reward for entering a room closer to the goal room.
-        room_transition_reward = 0
-        if self.current_room and new_room != self.current_room:
-            self.room_transitions += 1
-            old_room_dist = abs(self.current_room[0] - goal_room[0]) + abs(self.current_room[1] - goal_room[1])
-            new_room_dist = abs(new_room[0] - goal_room[0]) + abs(new_room[1] - goal_room[1])
-            if new_room_dist < old_room_dist:
-                room_transition_reward = 0.5
-        self.current_room = new_room
-
-        # ##: Penalty for revisiting states (capped).
+        # ##: Calculate exploration bonus
+        exploration_bonus = 0
         visit_count = self.visited.get(self.agent_pos, 0)
-        exploration_penalty = -0.01 * min(visit_count - 1, 10)
+        if visit_count == 0:
+            exploration_bonus = 0.05 # Reward for visiting a new cell
+        self.visited[self.agent_pos] = visit_count + 1
 
+        # ##: Standard step penalty
         step_penalty = -0.01
 
-        reward = progress_reward + exploration_penalty + step_penalty + room_transition_reward
-        return reward
+        # ##: Combine reward components
+        total_reward = progress_reward + exploration_bonus + step_penalty + wall_collision_penalty
+
+        return total_reward
 
     def step(self, action: Any) -> Tuple[object, SupportsFloat, bool, bool, Dict[str, Any]]:
         """
@@ -179,8 +172,17 @@ class Maze(RoomGridLevel):
         info : Dict[str, Any]
             Contains auxiliary diagnostic information.
         """
+        # ##: Store position before taking the step
+        prev_pos = self.agent_pos
+
         obs, _, terminated, truncated, info = super().step(action)
+
+        # ##: Check if position changed after the step
+        self.last_action_hit_wall = (self.agent_pos == prev_pos)
+
+        # ##: Calculate reward using the updated logic
         reward = self.reward()
+
         return obs, reward, terminated, truncated, info
 
     def add_goal(self) -> WorldObj:
