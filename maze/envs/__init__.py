@@ -1,27 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Maze Environments for MiniGrid.
+Initialize the maze environments module.
 
-This module makes the Maze environment classes available for import. It includes the base Maze class
-and several pre-defined maze configurations of varying difficulty levels.
+Exposes the different maze environment classes.
 """
 
-from maze.envs.maze import (
-    BaseMaze,
-    EasyMazeOne,
-    EasyMazeTwo,
-    HardMaze,
-    Maze,
-    MediumMazeOne,
-    MediumMazeTwo,
-)
+from .base_maze import BaseMaze
+from .easy_maze import EasyMaze
+from .hard_maze import HardMaze
+from .maze import Maze
+from .medium_maze import MediumMaze
 
-__all__ = [
-    "Maze",
-    "BaseMaze",
-    "EasyMazeOne",
-    "EasyMazeTwo",
-    "MediumMazeOne",
-    "MediumMazeTwo",
-    "HardMaze",
-]
+__all__ = ["Maze", "BaseMaze", "EasyMaze", "MediumMaze", "HardMaze"]

@@ -7,22 +7,53 @@ import argparse
 import os
 import time
 from collections import deque
+from typing import Any, Callable
 
 import numpy as np
 import tensorflow as tf
+from gymnasium import Env
 from loguru import logger
 from minigrid.wrappers import FullyObsWrapper, ImgObsWrapper
 
-from maze.envs.maze import Maze
+from maze.envs.base_maze import BaseMaze
+from maze.envs.easy_maze import EasyMaze
+from maze.envs.hard_maze import HardMaze
+from maze.envs.medium_maze import MediumMaze
 
 from . import setup_logger
 from .agent import PPOAgent
 from .config import MainConfig, load_config
 
+# ##: Define the curriculum
+CURRICULUM = [
+    {"name": "BaseMaze", "env_class": BaseMaze, "threshold": 0.5, "max_steps": 500_000},
+    {"name": "EasyMaze", "env_class": EasyMaze, "threshold": 1.0, "max_steps": 1_000_000},
+    {"name": "MediumMaze", "env_class": MediumMaze, "threshold": 2.0, "max_steps": 2_000_000},
+    {"name": "HardMaze", "env_class": HardMaze, "threshold": None, "max_steps": None},
+]
+
+
+def create_env(env_class: Callable[..., Any]) -> Env:
+    """
+    Helper function to create and wrap the environment.
+
+    Parameters
+    ----------
+    env_class : Callable[..., Any]
+        The environment class to instantiate and wrap.
+
+    Returns
+    -------
+    env : gym.Env
+        The wrapped environment.
+    """
+    env = ImgObsWrapper(FullyObsWrapper(env_class()))
+    return env
+
 
 def train(config: MainConfig):
     """
-    Trains the PPO agent based on the provided configuration.
+    Trains the PPO agent based on the provided configuration using curriculum learning.
 
     Parameters
     ----------
@@ -31,9 +62,9 @@ def train(config: MainConfig):
         (environment, training, PPO hyperparameters, logging).
     """
     setup_logger()
-    logger.info("Starting PPO training with loaded configuration...")
+    logger.info("Starting PPO training with loaded configuration and curriculum learning...")
     logger.info(f"Environment Seed: {config.environment.seed}")
-    logger.info(f"Total Timesteps: {config.training.total_timesteps}")
+    logger.info(f"Total Timesteps (Target): {config.training.total_timesteps}")
     logger.info(f"Steps per Update: {config.training.steps_per_update}")
     logger.info(
         f"PPO Hyperparameters: lr={config.ppo.learning_rate}, gamma={config.ppo.gamma}, "
@@ -50,9 +81,11 @@ def train(config: MainConfig):
     np.random.seed(config.environment.seed)
     tf.random.set_seed(config.environment.seed)
 
-    # ##: Create environment.
-    env = ImgObsWrapper(FullyObsWrapper(Maze()))
-    logger.info("Successfully created environment using direct Maze instantiation.")
+    # ##: Curriculum setup.
+    current_curriculum_index = 0
+    current_stage = CURRICULUM[current_curriculum_index]
+    logger.info(f"Starting curriculum stage 1: {current_stage['name']}")
+    env = create_env(current_stage["env_class"])
 
     # ##: Initialize agent.
     agent = PPOAgent(
@@ -86,6 +119,8 @@ def train(config: MainConfig):
     episode_length = 0
     total_episodes = 0
     update_cycle = 0
+    total_steps_overall = 0
+    steps_in_current_stage = 0
 
     # ##: Logging setup.
     reward_deque = deque(maxlen=100)
@@ -93,13 +128,21 @@ def train(config: MainConfig):
     start_time = time.time()
 
     logger.info("Starting training loop...")
-    for timestep in range(0, config.training.total_timesteps, config.training.steps_per_update):
+    while total_steps_overall < config.training.total_timesteps:
         update_cycle += 1
-        logger.debug(f"Update Cycle {update_cycle} | Timestep {timestep}/{config.training.total_timesteps}")
+        logger.debug(
+            f"Update Cycle {update_cycle} | "
+            f"Overall Timestep {total_steps_overall}/{config.training.total_timesteps} | "
+            f"Stage: {current_stage['name']}"
+        )
 
         last_obs_for_bootstrap = None
+        steps_this_update = 0
 
         for step in range(config.training.steps_per_update):
+            if total_steps_overall >= config.training.total_timesteps:
+                break
+
             # ##: Get action, value estimate, and log probability from agent.
             action, value, action_prob = agent.get_action(current_obs)
 
@@ -115,6 +158,9 @@ def train(config: MainConfig):
             current_obs = next_obs
             episode_reward += reward
             episode_length += 1
+            total_steps_overall += 1
+            steps_in_current_stage += 1
+            steps_this_update += 1
 
             # ##: Handle episode end.
             if done:
@@ -122,58 +168,103 @@ def train(config: MainConfig):
                 reward_deque.append(episode_reward)
                 length_deque.append(episode_length)
                 logger.debug(
-                    f"Episode {total_episodes} finished. Reward: {episode_reward:.2f}, Length: {episode_length}"
+                    f"Episode {total_episodes} finished. Reward: {episode_reward:.2f}, "
+                    f"Length: {episode_length}, Stage: {current_stage['name']}"
                 )
 
                 # ##: Store last observation only if episode ended due to truncation.
                 last_obs_for_bootstrap = next_obs if truncated else None
 
-                # ##: Reset environment.
+                # ##: Reset environment (using a potentially different seed per episode if desired).
                 obs_dict, _ = env.reset()
                 current_obs = obs_dict
                 episode_reward = 0
                 episode_length = 0
+
+                # ##: Check curriculum advancement criteria
+                if len(reward_deque) == reward_deque.maxlen:
+                    mean_reward = np.mean(reward_deque)
+                    stage_threshold = current_stage["threshold"]
+                    stage_max_steps = current_stage["max_steps"]
+                    advance_curriculum = False
+
+                    if stage_threshold is not None and mean_reward >= stage_threshold:
+                        logger.info(
+                            f"Stage {current_stage['name']} threshold ({stage_threshold}) met "
+                            f"with avg reward {mean_reward:.2f}."
+                        )
+                        advance_curriculum = True
+                    elif stage_max_steps is not None and steps_in_current_stage >= stage_max_steps:
+                        logger.info(f"Stage {current_stage['name']} max steps ({stage_max_steps}) reached.")
+                        advance_curriculum = True
+
+                    if advance_curriculum and current_curriculum_index < len(CURRICULUM) - 1:
+                        current_curriculum_index += 1
+                        current_stage = CURRICULUM[current_curriculum_index]
+                        logger.warning(
+                            f"Advancing to curriculum stage {current_curriculum_index + 1}: {current_stage['name']}"
+                        )
+                        env.close()
+                        env = create_env(current_stage["env_class"])
+
+                        current_obs, _ = env.reset()
+                        episode_reward = 0
+                        episode_length = 0
+                        reward_deque.clear()
+                        length_deque.clear()
+                        steps_in_current_stage = 0
+                        last_obs_for_bootstrap = None
+
             else:
                 if step == config.training.steps_per_update - 1:
                     # ##: If loop finishes without done, store the last observation for bootstrapping.
                     last_obs_for_bootstrap = next_obs
 
-        # ##: Perform learning update.
-        logger.debug(f"Performing learning update for cycle {update_cycle}...")
-        agent.learn(last_state=last_obs_for_bootstrap)
-        logger.debug("Learning update complete.")
+        # ##: Perform learning update only if steps were taken.
+        if steps_this_update > 0:
+            logger.debug(f"Performing learning update for cycle {update_cycle} with {steps_this_update} steps...")
+            agent.learn(last_state=last_obs_for_bootstrap)
+            logger.debug("Learning update complete.")
+        else:
+            logger.debug(f"Skipping learning update for cycle {update_cycle} as no steps were collected.")
 
         # ##: Logging.
         if update_cycle % config.logging.log_interval == 0 and len(reward_deque) > 0:
             mean_reward = np.mean(reward_deque)
             mean_length = np.mean(length_deque)
             elapsed_time = time.time() - start_time
-            steps_done = timestep + config.training.steps_per_update
-            fps = int(steps_done / elapsed_time) if elapsed_time > 0 else 0
-            logger.info(f"Timesteps: {steps_done}/{config.training.total_timesteps} | Episodes: {total_episodes}")
-            logger.info(f"Mean Reward (last 100): {mean_reward:.2f} | Mean Length (last 100): {mean_length:.1f}")
+            fps = int(total_steps_overall / elapsed_time) if elapsed_time > 0 else 0
+            logger.info(
+                f"Timesteps: {total_steps_overall}/{config.training.total_timesteps} | "
+                f"Episodes: {total_episodes} | Stage: {current_stage['name']}"
+            )
+            logger.info(
+                f"Mean Reward (last {reward_deque.maxlen}): {mean_reward:.2f} | "
+                f"Mean Length (last {length_deque.maxlen}): {mean_length:.1f}"
+            )
             logger.info(f"FPS: {fps} | Elapsed Time: {elapsed_time:.2f}s")
 
         # ##: Save models periodically.
         if config.logging.save_path and update_cycle % config.logging.save_interval == 0:
-            logger.info(f"Saving models at timestep {steps_done}...")
-            agent.save_models(config.logging.save_path)
+            save_file_path = f"{config.logging.save_path}_ts{total_steps_overall}_stage{current_curriculum_index}"
+            logger.info(f"Saving models to {save_file_path}...")
+            agent.save_models(save_file_path)
 
-    logger.info("Training finished.")
+    logger.info("Training finished (total timesteps reached).")
     env.close()
 
     # ##: Final model save.
     if config.logging.save_path:
-        logger.info("Saving final models...")
-        agent.save_models(config.logging.save_path + "_final")
+        final_save_path = f"{config.logging.save_path}_final_ts{total_steps_overall}_stage{current_curriculum_index}"
+        logger.info(f"Saving final models to {final_save_path}...")
+        agent.save_models(final_save_path)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Train PPO agent on MiniGrid Maze using YAML configuration.",
+        description="Train PPO agent on MiniGrid Maze using YAML configuration and curriculum learning.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    # Argument for specifying the config file
     parser.add_argument(
         "--config",
         type=str,
@@ -181,6 +272,7 @@ if __name__ == "__main__":
         help="Path to the YAML configuration file.",
     )
 
+    # ##: Keep override arguments if needed, but curriculum might make some less relevant.
     parser.add_argument("--total-timesteps", type=int, default=None, help="Override total training timesteps")
     parser.add_argument("--steps-per-update", type=int, default=None, help="Override steps collected per agent update")
     parser.add_argument("--lr", type=float, default=None, help="Override learning rate")
@@ -198,9 +290,6 @@ if __name__ == "__main__":
     parser.add_argument("--load-path", type=str, default=None, help="Override path prefix to load pre-trained models")
 
     args = parser.parse_args()
-
-    # Load configuration from YAML and apply CLI overrides
     configuration = load_config(config_path=args.config, args=args)
 
-    # Start training with the loaded configuration
     train(configuration)

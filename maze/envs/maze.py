@@ -222,34 +222,3 @@ class Maze(RoomGridLevel):
         self.goal_room = self.get_room_coords(self.goal_position[0], self.goal_position[1])
         self.room_transitions = 0
         self.visited = {}
-
-class BaseMaze(Maze):
-    """Simplest maze: 1x1 room."""
-    def __init__(self):
-        super().__init__(num_rows=1, num_cols=1, room_size=8, num_dists=0)
-
-
-class EasyMazeOne(Maze):
-    """Easy maze: 1x2 rooms, doors open."""
-    def __init__(self):
-        super().__init__(num_rows=1, num_cols=2, room_size=8, doors_open=True)
-
-class EasyMazeTwo(Maze):
-    """Easy maze: 1x2 rooms, doors closed."""
-    def __init__(self):
-        super().__init__(num_rows=1, num_cols=2, room_size=8, doors_open=False)
-
-class MediumMazeOne(Maze):
-    """Medium maze: 2x2 rooms, doors open."""
-    def __init__(self):
-        super().__init__(num_rows=2, num_cols=2, room_size=8, doors_open=True)
-
-class MediumMazeTwo(Maze):
-    """Medium maze: 2x2 rooms, doors closed."""
-    def __init__(self):
-        super().__init__(num_rows=2, num_cols=2, room_size=8, doors_open=False)
-
-class HardMaze(Maze):
-    """Hard maze: 3x3 rooms, doors closed."""
-    def __init__(self):
-        super().__init__(num_rows=3, num_cols=3, room_size=8, doors_open=False)

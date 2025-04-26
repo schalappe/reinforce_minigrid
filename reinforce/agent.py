@@ -5,13 +5,13 @@ PPO Agent implementation using TensorFlow.
 Combines the policy/value networks, buffer, and PPO training logic.
 """
 
+from pathlib import Path
 from typing import Optional, Tuple
 
 import gymnasium as gym
 import numpy as np
 import tensorflow as tf
 from loguru import logger
-from pathlib import Path
 
 from . import setup_logger
 from .buffer import Buffer
