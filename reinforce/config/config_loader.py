@@ -226,6 +226,7 @@ def load_config(
         arg_map = {
             "total_timesteps": ("training", "total_timesteps"),
             "steps_per_update": ("training", "steps_per_update"),
+            "num_envs": ("training", "num_envs"),
             "lr": ("ppo", "learning_rate"),
             "gamma": ("ppo", "gamma"),
             "lam": ("ppo", "lambda_gae"),
