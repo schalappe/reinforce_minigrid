@@ -4,6 +4,7 @@ Main training script for the PPO agent on the MiniGrid Maze environment.
 """
 
 import argparse
+import multiprocessing as mp
 import os
 import time
 from collections import deque
@@ -12,6 +13,7 @@ from typing import Any, Callable
 import numpy as np
 import tensorflow as tf
 from gymnasium import Env
+from gymnasium.vector import AsyncVectorEnv
 from loguru import logger
 from minigrid.wrappers import ImgObsWrapper
 
@@ -47,8 +49,13 @@ def create_env(env_class: Callable[..., Any]) -> Env:
     env : gym.Env
         The wrapped environment.
     """
-    env = ImgObsWrapper(env_class(render_mode="rgb_array"))
-    return env
+
+    # ##: This function will be used by the vector env.
+    def make_env():
+        env = ImgObsWrapper(env_class(render_mode="rgb_array"))
+        return env
+
+    return make_env
 
 
 def train(config: MainConfig):
@@ -63,9 +70,12 @@ def train(config: MainConfig):
     """
     setup_logger()
     logger.info("Starting PPO training with loaded configuration and curriculum learning...")
+    num_envs = config.training.num_envs
+    logger.info(f"Number of parallel environments: {num_envs}")
     logger.info(f"Environment Seed: {config.environment.seed}")
     logger.info(f"Total Timesteps (Target): {config.training.total_timesteps}")
-    logger.info(f"Steps per Update: {config.training.steps_per_update}")
+    logger.info(f"Steps per Update (per env): {config.training.steps_per_update}")
+    logger.info(f"Total Steps per Update (all envs): {config.training.steps_per_update * num_envs}")
     logger.info(
         f"PPO Hyperparameters: lr={config.ppo.learning_rate}, gamma={config.ppo.gamma}, "
         f"lambda={config.ppo.lambda_gae}, clip={config.ppo.clip_param}, "
@@ -86,12 +96,25 @@ def train(config: MainConfig):
     current_stage = CURRICULUM[current_curriculum_index]
     stage_name = current_stage["name"]
     logger.info(f"Starting curriculum stage 1: {stage_name}")
-    env = create_env(current_stage["env_class"])
 
-    # ##: Initialize agent.
+    # ##: Create vectorized environment.
+    env_fns = [create_env(current_stage["env_class"]) for _ in range(num_envs)]
+
+    # ##: Determine the appropriate multiprocessing context.
+    context_method = "fork"  # Default to 'fork'
+    try:
+        mp.get_context("fork")
+    except ValueError:
+        context_method = "spawn"
+        logger.warning("Fork context not available, falling back to spawn context. This might be slower.")
+
+    env = AsyncVectorEnv(env_fns, context=context_method)
+    logger.info(f"Using {type(env).__name__} with context '{context_method}'")
+
+    # ##: Initialize agent (Observation/Action space is the same for single env in vector).
     agent = PPOAgent(
-        env.observation_space,
-        env.action_space,
+        env.single_observation_space,
+        env.single_action_space,
         learning_rate=config.ppo.learning_rate,
         gamma=config.ppo.gamma,
         lam=config.ppo.lambda_gae,
@@ -100,6 +123,8 @@ def train(config: MainConfig):
         vf_coef=config.ppo.value_coef,
         epochs=config.ppo.epochs,
         batch_size=config.ppo.batch_size,
+        num_envs=num_envs,
+        steps_per_update=config.training.steps_per_update,
     )
 
     # ##: Load pre-trained models if specified.
@@ -114,18 +139,20 @@ def train(config: MainConfig):
             os.makedirs(save_dir, exist_ok=True)
         logger.info(f"Models will be saved to {config.logging.save_path}_*.keras")
 
-    # ##: Training loop variables.
+    # ##: Training loop variables for vectorized envs.
     current_obs, _ = env.reset(seed=config.environment.seed)
-    episode_reward = 0
-    episode_length = 0
+
+    # ##: Track rewards and lengths per environment.
+    episode_rewards = np.zeros(num_envs, dtype=np.float32)
+    episode_lengths = np.zeros(num_envs, dtype=np.int32)
     total_episodes = 0
     update_cycle = 0
     total_steps_overall = 0
     steps_in_current_stage = 0
 
-    # ##: Logging setup.
-    reward_deque = deque(maxlen=100)
-    length_deque = deque(maxlen=100)
+    # ##: Logging setup (track stats across all envs).
+    reward_deque = deque(maxlen=100 * num_envs)
+    length_deque = deque(maxlen=100 * num_envs)
     start_time = time.time()
 
     logger.info("Starting training loop...")
@@ -138,98 +165,114 @@ def train(config: MainConfig):
             f"Stage: {stage_name}"
         )
 
-        last_obs_for_bootstrap = None
-        steps_this_update = 0
+        # ##: Collect experience from parallel environments.
+        steps_per_env = config.training.steps_per_update
+        collected_steps_this_update = 0
 
-        for step in range(config.training.steps_per_update):
+        # ##: We need to store the last observation for bootstrapping if the update ends mid-episode.
+        last_obs_for_bootstrap = None
+
+        for step in range(steps_per_env):
             if total_steps_overall >= config.training.total_timesteps:
                 break
 
-            # ##: Get action, value estimate, and log probability from agent.
-            action, value, action_prob = agent.get_action(current_obs)
+            # ##: Get actions, values, log probs for the batch of observations.
+            actions, values, action_probs = agent.get_action(current_obs)
 
-            # ##: Step the environment.
-            next_obs_dict, reward, terminated, truncated, _ = env.step(action)
-            next_obs = next_obs_dict
+            # ##: Step the vectorized environment.
+            next_obs_batch, rewards_batch, terminated_batch, truncated_batch, _ = env.step(actions)
 
-            # ##: Store transition in buffer.
-            done = terminated or truncated
-            agent.store_transition(current_obs, action, reward, value, done, action_prob)
+            # ##: Store transitions for the batch. Agent needs modification.
+            dones_batch = terminated_batch | truncated_batch
+            agent.store_transition(current_obs, actions, rewards_batch, values, dones_batch, action_probs)
 
-            # ##: Update current state and episode trackers.
-            current_obs = next_obs
-            episode_reward += reward
-            episode_length += 1
-            total_steps_overall += 1
-            steps_in_current_stage += 1
-            steps_this_update += 1
+            # ##: Update current observations.
+            current_obs = next_obs_batch
 
-            # ##: Handle episode end.
-            if done:
-                total_episodes += 1
-                reward_deque.append(episode_reward)
-                length_deque.append(episode_length)
-                stage_name = current_stage["name"]
-                logger.debug(
-                    f"Episode {total_episodes} finished. Reward: {episode_reward:.2f}, "
-                    f"Length: {episode_length}, Stage: {stage_name}"
-                )
+            # ##: Update episode trackers for each environment.
+            episode_rewards += rewards_batch
+            episode_lengths += 1
+            total_steps_overall += num_envs
+            steps_in_current_stage += num_envs
+            collected_steps_this_update += num_envs
 
-                # ##: Store last observation only if episode ended due to truncation.
-                last_obs_for_bootstrap = next_obs if truncated else None
-
-                # ##: Reset environment (using a potentially different seed per episode if desired).
-                obs_dict, _ = env.reset()
-                current_obs = obs_dict
-                episode_reward = 0
-                episode_length = 0
-
-                # ##: Check curriculum advancement criteria
-                if len(reward_deque) == reward_deque.maxlen:
-                    mean_reward = np.mean(reward_deque)
-                    stage_threshold = current_stage["threshold"]
-                    stage_max_steps = current_stage["max_steps"]
-                    advance_curriculum = False
+            # ##: Handle episode ends for each environment.
+            for i, done in enumerate(dones_batch):
+                if done:
+                    # ##: Log finished episode stats.
+                    finished_reward = episode_rewards[i]
+                    finished_length = episode_lengths[i]
+                    reward_deque.append(finished_reward)
+                    length_deque.append(finished_length)
+                    total_episodes += 1
                     stage_name = current_stage["name"]
+                    logger.debug(
+                        f"Env {i} | Episode {total_episodes} finished. Reward: {finished_reward:.2f}, "
+                        f"Length: {finished_length}, Stage: {stage_name}"
+                    )
 
-                    if stage_threshold is not None and mean_reward >= stage_threshold:
-                        logger.info(
-                            f"Stage {stage_name} threshold ({stage_threshold}) met "
-                            f"with avg reward {mean_reward:.2f}."
-                        )
-                        advance_curriculum = True
-                    elif stage_max_steps is not None and steps_in_current_stage >= stage_max_steps:
-                        logger.info(f"Stage {stage_name} max steps ({stage_max_steps}) reached.")
-                        advance_curriculum = True
+                    # ##: Reset individual trackers.
+                    episode_rewards[i] = 0
+                    episode_lengths[i] = 0
 
-                    if advance_curriculum and current_curriculum_index < len(CURRICULUM) - 1:
-                        current_curriculum_index += 1
-                        current_stage = CURRICULUM[current_curriculum_index]
+                    # ##: Check curriculum advancement criteria.
+                    if len(reward_deque) == reward_deque.maxlen:
+                        mean_reward = np.mean(reward_deque)
+                        stage_threshold = current_stage["threshold"]
+                        stage_max_steps = current_stage["max_steps"]
+                        advance_curriculum = False
                         stage_name = current_stage["name"]
-                        logger.warning(f"Advancing to curriculum stage {current_curriculum_index + 1}: {stage_name}")
-                        env.close()
-                        env = create_env(current_stage["env_class"])
 
-                        current_obs, _ = env.reset()
-                        episode_reward = 0
-                        episode_length = 0
-                        reward_deque.clear()
-                        length_deque.clear()
-                        steps_in_current_stage = 0
-                        last_obs_for_bootstrap = None
+                        if stage_threshold is not None and mean_reward >= stage_threshold:
+                            logger.info(
+                                f"Stage {stage_name} threshold ({stage_threshold}) met "
+                                f"with avg reward {mean_reward:.2f} across {num_envs} envs."
+                            )
+                            advance_curriculum = True
+                        elif stage_max_steps is not None and steps_in_current_stage >= stage_max_steps:
+                            logger.info(
+                                f"Stage {stage_name} max steps ({stage_max_steps}) reached across {num_envs} envs."
+                            )
+                            advance_curriculum = True
 
-            else:
-                if step == config.training.steps_per_update - 1:
-                    # ##: If loop finishes without done, store the last observation for bootstrapping.
-                    last_obs_for_bootstrap = next_obs
+                        if advance_curriculum and current_curriculum_index < len(CURRICULUM) - 1:
+                            current_curriculum_index += 1
+                            current_stage = CURRICULUM[current_curriculum_index]
+                            stage_name = current_stage["name"]
+                            logger.warning(
+                                f"Advancing to curriculum stage {current_curriculum_index + 1}: {stage_name}"
+                            )
 
-        # ##: Perform learning update only if steps were taken.
-        if steps_this_update > 0:
-            logger.debug(f"Performing learning update for cycle {update_cycle} with {steps_this_update} steps...")
+                            # ##: Close old envs and create new ones for the next stage.
+                            env.close()
+                            env_fns = [create_env(current_stage["env_class"]) for _ in range(num_envs)]
+
+                            # ##: Use the determined context_method string here
+                            env = AsyncVectorEnv(env_fns, context=context_method)
+
+                            current_obs, _ = env.reset()
+                            episode_rewards.fill(0)
+                            episode_lengths.fill(0)
+                            reward_deque.clear()
+                            length_deque.clear()
+                            steps_in_current_stage = 0
+                            last_obs_for_bootstrap = None
+                            break
+
+            # ##: Store last observation for bootstrapping if update cycle ends.
+            if step == steps_per_env - 1:
+                last_obs_for_bootstrap = next_obs_batch
+
+        # ##: Perform learning update only if steps were collected in this cycle.
+        if collected_steps_this_update > 0:
+            logger.info(
+                f"Performing learning update for cycle {update_cycle} with {collected_steps_this_update} steps..."
+            )
+            # ##: Agent needs modification to handle batch last_state.
             agent.learn(last_state=last_obs_for_bootstrap)
-            logger.debug("Learning update complete.")
+            logger.info("Learning update complete.")
         else:
-            logger.debug(f"Skipping learning update for cycle {update_cycle} as no steps were collected.")
+            logger.info(f"Skipping learning update for cycle {update_cycle} as no steps were collected.")
 
         # ##: Logging.
         if update_cycle % config.logging.log_interval == 0 and len(reward_deque) > 0:
@@ -255,7 +298,7 @@ def train(config: MainConfig):
             agent.save_models(save_file_path)
 
     logger.info("Training finished (total timesteps reached).")
-    env.close()
+    env.close()  # Close the vector env
 
     # ##: Final model save.
     if config.logging.save_path:
@@ -278,7 +321,10 @@ if __name__ == "__main__":
 
     # ##: Keep override arguments if needed, but curriculum might make some less relevant.
     parser.add_argument("--total-timesteps", type=int, default=None, help="Override total training timesteps")
-    parser.add_argument("--steps-per-update", type=int, default=None, help="Override steps collected per agent update")
+    parser.add_argument(
+        "--steps-per-update", type=int, default=None, help="Override steps collected per environment per agent update"
+    )
+    parser.add_argument("--num-envs", type=int, default=None, help="Override number of parallel environments")
     parser.add_argument("--lr", type=float, default=None, help="Override learning rate")
     parser.add_argument("--gamma", type=float, default=None, help="Override discount factor")
     parser.add_argument("--lam", type=float, default=None, help="Override GAE lambda parameter")

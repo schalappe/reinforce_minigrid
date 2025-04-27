@@ -67,10 +67,13 @@ class TrainingConfig:
         Total number of environment steps to train for. Default is 1,000,000.
     steps_per_update : int, optional
         Number of steps collected from the environment before each agent learning update. Default is 2048.
+    num_envs : int, optional
+        Number of parallel environments to use for experience collection. Default is 4.
     """
 
     total_timesteps: int = 1_000_000
     steps_per_update: int = 2048
+    num_envs: int = 4
 
 
 @dataclass

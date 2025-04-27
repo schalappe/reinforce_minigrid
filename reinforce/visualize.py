@@ -31,7 +31,7 @@ ENVS: Dict[str, Callable] = {
     "--model-prefix",
     "model_path_prefix",
     type=click.Path(exists=False),
-    default="./models/ppo_maze",
+    default="./models/ppo_maze_final",
     help="Path prefix for loading the policy and value models.",
     show_default=True,
 )
@@ -118,7 +118,9 @@ def evaluate_and_render(model_path_prefix: str, output_gif_path: str, seed: int,
         frames.append(frame)
 
         # ##: Get action from the agent (only need action, ignore value/prob).
-        action, _, _ = agent.get_action(current_obs)
+        # Add batch dimension for the agent's network
+        current_obs_batched = np.expand_dims(current_obs, axis=0)
+        action, _, _ = agent.get_action(current_obs_batched)
 
         # ##: Step the environment.
         next_obs_dict, _, terminated, truncated, _ = env.step(action)

@@ -1,107 +1,173 @@
 # -*- coding: utf-8 -*-
 """
-Experience replay buffer for PPO.
+Experience replay buffer for PPO, optimized for vectorized environments.
 
-Stores trajectories and calculates advantages and returns using Generalized Advantage Estimation (GAE).
+Stores trajectories from multiple parallel environments and calculates advantages and
+returns using Generalized Advantage Estimation (GAE).
 """
 
 import numpy as np
 import tensorflow as tf
+from loguru import logger
 
 
 class Buffer:
     """
-    A buffer for storing trajectories and calculating GAE.
+    A buffer for storing trajectories from parallel environments and calculating GAE.
 
-    This buffer collects agent experiences (states, actions, rewards, etc.) over a period and computes
-    the Generalized Advantage Estimation (GAE) and returns, which are crucial for training policy
-    gradient algorithms like PPO.
+    This buffer uses pre-allocated NumPy arrays for efficiency when working with vectorized environments
+    It collects experiences (states, actions, rewards, etc.) from `num_envs` environments over
+    `steps_per_env` steps and computes the Generalized Advantage Estimation (GAE) and returns for PPO training.
     """
 
-    def __init__(self, gamma: float = 0.99, lam: float = 0.95):
+    def __init__(self, obs_shape: tuple, num_envs: int, steps_per_env: int, gamma: float = 0.99, lam: float = 0.95):
         """
-        Initialize the buffer.
+        Initialize the buffer with pre-allocated arrays.
 
         Parameters
         ----------
+        obs_shape : tuple
+            Shape of a single observation from the environment.
+        num_envs : int
+            Number of parallel environments.
+        steps_per_env : int
+            Number of steps collected from each environment per update cycle.
         gamma : float, optional
             Discount factor. Default is 0.99.
         lam : float, optional
             GAE lambda parameter. Default is 0.95.
         """
+        self.obs_shape = obs_shape
+        self.num_envs = num_envs
+        self.steps_per_env = steps_per_env
         self.gamma = gamma
         self.lam = lam
-        self.states = []
-        self.actions = []
-        self.rewards = []
-        self.values = []
-        self.dones = []
-        self.action_probs = []
-        self.advantages = None
-        self.returns = None
 
-    def store(self, state: np.ndarray, action: int, reward: float, value: float, done: bool, action_prob: float):
+        # ##: Calculate total buffer size.
+        self.buffer_size = self.num_envs * self.steps_per_env
+
+        # ##: Pre-allocate NumPy arrays for efficiency.
+        self.states = np.zeros((self.steps_per_env, self.num_envs) + self.obs_shape, dtype=np.float32)
+        self.actions = np.zeros((self.steps_per_env, self.num_envs), dtype=np.int32)
+        self.rewards = np.zeros((self.steps_per_env, self.num_envs), dtype=np.float32)
+        self.values = np.zeros((self.steps_per_env, self.num_envs), dtype=np.float32)
+        self.dones = np.zeros((self.steps_per_env, self.num_envs), dtype=np.float32)
+        self.action_probs = np.zeros((self.steps_per_env, self.num_envs), dtype=np.float32)
+        self.advantages = np.zeros((self.steps_per_env, self.num_envs), dtype=np.float32)
+        self.returns = np.zeros((self.steps_per_env, self.num_envs), dtype=np.float32)
+
+        self.ptr = 0
+        self.trajectory_ready = False
+
+    def store(
+        self,
+        state: np.ndarray,
+        action: np.ndarray,
+        reward: np.ndarray,
+        value: np.ndarray,
+        done: np.ndarray,
+        action_prob: np.ndarray,
+    ):
         """
-        Store a single step transition in the buffer.
+        Store a batch of transitions from parallel environments at the current pointer position.
 
         Parameters
         ----------
         state : np.ndarray
-            The state observation.
-        action : int
-            The action taken.
-        reward : float
-            The reward received.
-        value : float
-            The value estimate for the state.
-        done : bool
-            Whether the episode terminated after this step.
-        action_prob : float
-            The log probability of the action taken.
-        """
-        self.states.append(state)
-        self.actions.append(action)
-        self.rewards.append(reward)
-        self.values.append(value)
-        self.dones.append(done)
-        self.action_probs.append(action_prob)
+            Batch of states observed. Shape: (num_envs, *obs_shape)
+        action : np.ndarray
+            Batch of actions taken. Shape: (num_envs,)
+        reward : np.ndarray
+            Batch of rewards received. Shape: (num_envs,)
+        value : np.ndarray
+            Batch of value estimates of the states. Shape: (num_envs,)
+        done : np.ndarray
+            Batch of done flags (boolean or int). Shape: (num_envs,)
+        action_prob : np.ndarray
+            Batch of log probabilities of the actions taken. Shape: (num_envs,)
 
-    def compute_advantages_and_returns(self, last_value: float = 0.0):
+        Raises
+        ------
+        IndexError
+            If trying to store beyond the buffer capacity (steps_per_env).
         """
-        Computes advantages and returns for the stored trajectory using GAE.
+        if self.ptr >= self.steps_per_env:
+            raise IndexError(f"Buffer full. Tried to store at index {self.ptr} with capacity {self.steps_per_env}.")
+
+        self.states[self.ptr] = state
+        self.actions[self.ptr] = action
+        self.rewards[self.ptr] = reward
+        self.values[self.ptr] = value
+        self.dones[self.ptr] = done.astype(np.float32)
+        self.action_probs[self.ptr] = action_prob
+
+        self.ptr += 1
+        self.trajectory_ready = False
+
+    def compute_advantages_and_returns(self, last_values: np.ndarray):
+        """
+        Computes advantages and returns for the stored trajectories using GAE.
+
+        Operates across all parallel environments simultaneously.
 
         Parameters
         ----------
-        last_value : float, optional
-            The value estimate of the final state in the trajectory. Default is 0.0.
+        last_values : np.ndarray
+            The value estimates of the final state in each parallel trajectory.
+            Shape: (num_envs,).
         """
-        # ##: Convert lists to numpy arrays for vectorized operations.
-        rewards = np.array(self.rewards, dtype=np.float32)
-        values = np.array(self.values + [last_value], dtype=np.float32)
-        dones = np.array(self.dones, dtype=np.float32)
+        if self.ptr != self.steps_per_env:
+            logger.warning(
+                f"Computing advantages with incomplete buffer ({self.ptr}/{self.steps_per_env} steps). "
+                "This might happen at the end of training."
+            )
 
-        advantages = np.zeros_like(rewards)
+        values_with_last = np.vstack((self.values[: self.ptr], last_values.reshape(1, self.num_envs)))
+
         gae = 0.0
+        # ##: Calculate advantages working backwards.
+        for t in reversed(range(self.ptr)):
+            # ##: Delta = R_t + gamma * V(S_{t+1}) * (1 - Done_t) - V(S_t)
+            delta = (
+                self.rewards[t] + self.gamma * values_with_last[t + 1] * (1.0 - self.dones[t]) - values_with_last[t]
+            )
+            # ##: GAE = Delta_t + gamma * lambda * (1 - Done_t) * GAE_{t+1}
+            gae = delta + self.gamma * self.lam * (1.0 - self.dones[t]) * gae
+            self.advantages[t] = gae
 
-        # ##: Calculate advantages working backwards from the end of the trajectory.
-        for traj in reversed(range(len(rewards))):
-            delta = rewards[traj] + self.gamma * values[traj + 1] * (1 - dones[traj]) - values[traj]
-            gae = delta + self.gamma * self.lam * (1 - dones[traj]) * gae
-            advantages[traj] = gae
+        # ##: Calculate returns (target for value function) = Advantages + Values
+        self.returns[: self.ptr] = self.advantages[: self.ptr] + self.values[: self.ptr]
 
-        # ##: Calculate returns (target for value function).
-        returns = advantages + values[:-1]
+        # ##: Normalize advantages across the entire batch of collected data.
+        flat_advantages = self.advantages[: self.ptr].flatten()
+        mean_adv = np.mean(flat_advantages)
+        std_adv = np.std(flat_advantages)
+        self.advantages[: self.ptr] = (self.advantages[: self.ptr] - mean_adv) / (std_adv + 1e-8)
 
-        self.advantages = tf.convert_to_tensor(advantages, dtype=tf.float32)
-        self.returns = tf.convert_to_tensor(returns, dtype=tf.float32)
+        self.trajectory_ready = True
 
-        self.advantages = (self.advantages - tf.reduce_mean(self.advantages)) / (
-            tf.math.reduce_std(self.advantages) + 1e-8
-        )
+    def _flatten_buffer(self) -> tuple:
+        """
+        Flattens the buffer arrays from (steps, envs, ...) to (total_steps, ...).
+
+        Returns
+        -------
+        tuple
+            Tuple containing flattened arrays of states, actions, action_probs, returns, and advantages.
+        """
+        total_steps = self.ptr * self.num_envs
+
+        states_flat = self.states[: self.ptr].swapaxes(0, 1).reshape((total_steps,) + self.obs_shape)
+        actions_flat = self.actions[: self.ptr].swapaxes(0, 1).reshape(total_steps)
+        action_probs_flat = self.action_probs[: self.ptr].swapaxes(0, 1).reshape(total_steps)
+        returns_flat = self.returns[: self.ptr].swapaxes(0, 1).reshape(total_steps)
+        advantages_flat = self.advantages[: self.ptr].swapaxes(0, 1).reshape(total_steps)
+
+        return states_flat, actions_flat, action_probs_flat, returns_flat, advantages_flat
 
     def get_batches(self, batch_size: int) -> tf.data.Dataset:
         """
-        Creates a TensorFlow Dataset for iterating over mini-batches.
+        Creates a TensorFlow Dataset for iterating over mini-batches from the flattened buffer.
 
         Parameters
         ----------
@@ -118,31 +184,36 @@ class Buffer:
         ValueError
             If advantages and returns have not been computed yet.
         """
-        if self.advantages is None or self.returns is None:
+        if not self.trajectory_ready:
             raise ValueError("Advantages and returns must be computed before getting batches.")
+        if self.ptr == 0:
+            logger.warning("Attempting to get batches from an empty buffer.")
+            return tf.data.Dataset.from_tensor_slices(
+                (tf.zeros((0,) + self.obs_shape), tf.zeros(0, dtype=tf.int32), tf.zeros(0), tf.zeros(0), tf.zeros(0))
+            ).batch(batch_size)
 
-        # ##: Convert remaining lists to tensors.
-        states_tensor = tf.convert_to_tensor(np.array(self.states), dtype=tf.float32)
-        actions_tensor = tf.convert_to_tensor(np.array(self.actions), dtype=tf.int32)
-        action_probs_tensor = tf.convert_to_tensor(np.array(self.action_probs), dtype=tf.float32)
+        # ##: Flatten data across environments and steps.
+        states_f, actions_f, action_probs_f, returns_f, advantages_f = self._flatten_buffer()
 
-        # ##: Create dataset.
+        # ##: Convert flattened numpy arrays to tensors.
+        states_tensor = tf.convert_to_tensor(states_f, dtype=tf.float32)
+        actions_tensor = tf.convert_to_tensor(actions_f, dtype=tf.int32)
+        action_probs_tensor = tf.convert_to_tensor(action_probs_f, dtype=tf.float32)
+        returns_tensor = tf.convert_to_tensor(returns_f, dtype=tf.float32)
+        advantages_tensor = tf.convert_to_tensor(advantages_f, dtype=tf.float32)
+
+        # ##: Create dataset from flattened tensors.
         dataset = tf.data.Dataset.from_tensor_slices(
-            (states_tensor, actions_tensor, action_probs_tensor, self.returns, self.advantages)
+            (states_tensor, actions_tensor, action_probs_tensor, returns_tensor, advantages_tensor)
         )
 
         # ##: Shuffle and batch the dataset.
-        dataset = dataset.shuffle(buffer_size=len(self.states)).batch(batch_size)
+        total_samples = self.ptr * self.num_envs
+        dataset = dataset.shuffle(buffer_size=total_samples).batch(batch_size)
 
         return dataset
 
     def clear(self):
-        """Clears all stored trajectories from the buffer."""
-        self.states.clear()
-        self.actions.clear()
-        self.rewards.clear()
-        self.values.clear()
-        self.dones.clear()
-        self.action_probs.clear()
-        self.advantages = None
-        self.returns = None
+        """Resets the buffer pointer and trajectory ready flag."""
+        self.ptr = 0
+        self.trajectory_ready = False

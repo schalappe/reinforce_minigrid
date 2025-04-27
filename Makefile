@@ -1,10 +1,11 @@
 # Training parameters
 TOTAL_TIMESTEPS ?= 3000000
 STEPS_PER_UPDATE ?= 2048
+NUM_ENVS ?= 5
 CONFIG ?= configs/default_training.yaml
 
 # Visualization parameters
-MODEL_PREFIX ?= ./models/ppo_maze
+MODEL_PREFIX ?= ./models/ppo_maze_final
 OUTPUT_GIF ?= evaluation_render.gif
 LEVEL ?= easy
 
@@ -26,7 +27,8 @@ train:
 	python -m reinforce.train \
 		--config $(CONFIG) \
 		--total-timesteps $(TOTAL_TIMESTEPS) \
-		--steps-per-update $(STEPS_PER_UPDATE)
+		--steps-per-update $(STEPS_PER_UPDATE) \
+		--num-envs $(NUM_ENVS)
 
 visualize:
 	python -m reinforce.visualize \

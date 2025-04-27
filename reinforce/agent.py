@@ -41,6 +41,8 @@ class PPOAgent:
         vf_coef: float = 0.5,
         epochs: int = 4,
         batch_size: int = 64,
+        num_envs: int = 1,
+        steps_per_update: int = 2048,
     ):
         """Initializes the PPO Agent.
 
@@ -74,7 +76,12 @@ class PPOAgent:
             experiences. Default is 4.
         batch_size : int, optional
             Size of the mini-batches used during training epochs. Default is 64.
+        num_envs : int, optional
+            Number of parallel environments being used. Default is 1.
+        steps_per_update : int, optional
+            Number of steps collected per environment before an update. Default is 2048.
         """
+        self.obs_shape = observation_space.shape
         self.input_shape = observation_space.shape
 
         if not isinstance(action_space, gym.spaces.Discrete):
@@ -97,14 +104,16 @@ class PPOAgent:
         self.policy_optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
         self.value_optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
-        # ##: Initialize buffer.
-        self.buffer = Buffer(gamma=self.gamma, lam=self.lam)
+        # ##: Initialize buffer with size information.
+        self.buffer = Buffer(
+            obs_shape=self.obs_shape, num_envs=num_envs, steps_per_env=steps_per_update, gamma=self.gamma, lam=self.lam
+        )
 
     def _preprocess_state(self, state: np.ndarray) -> tf.Tensor:
         """
-        Preprocesses the environment state for network input.
+        Preprocesses the environment state(s) for network input.
 
-        Ensures the state has a batch dimension and converts it to a TensorFlow tensor.
+        Converts state(s) to a TensorFlow tensor. Assumes input might already have a batch dimension.
 
         Parameters
         ----------
@@ -116,16 +125,14 @@ class PPOAgent:
         tf.Tensor
             The processed state tensor ready for network input.
         """
-        if len(state.shape) == len(self.input_shape):
-            state = np.expand_dims(state, 0)
         return tf.convert_to_tensor(state, dtype=tf.float32)
 
-    def get_action(self, state: np.ndarray) -> Tuple[int, float, float]:
+    def get_action(self, state: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Selects an action based on the current policy and state.
+        Selects actions based on the current policy and a batch of states.
 
-        Uses the policy network to sample an action from the distribution for the
-        given state and the value network to estimate the state's value.
+        Uses the policy network to sample actions from the distribution for the
+        given states and the value network to estimate the states' values.
 
         Parameters
         ----------
@@ -134,12 +141,12 @@ class PPOAgent:
 
         Returns
         -------
-        action : int
-            The action selected by the policy.
-        value : float
-            The value estimate for the state from the critic.
-        action_log_prob : float
-            The log probability of the selected action under the current policy.
+        actions : np.ndarray
+            The batch of actions selected by the policy.
+        values : np.ndarray
+            The batch of value estimates for the states from the critic.
+        action_log_probs : np.ndarray
+            The batch of log probabilities of the selected actions under the current policy.
         """
         processed_state = self._preprocess_state(state)
 
@@ -154,36 +161,43 @@ class PPOAgent:
         action_prob = dist.log_prob(action)
 
         # ##: Get value estimate from value network.
-        value = self.value_network(processed_state, training=False)
+        values = self.value_network(processed_state, training=False)
 
-        return action.numpy()[0], value.numpy()[0, 0], action_prob.numpy()[0]
+        # ##: Return numpy arrays for interaction with gym envs.
+        return action.numpy(), tf.squeeze(values).numpy(), action_prob.numpy()
 
     def store_transition(
-        self, state: np.ndarray, action: int, reward: float, value: float, done: bool, action_log_prob: float
+        self,
+        state: np.ndarray,
+        action: np.ndarray,
+        reward: np.ndarray,
+        value: np.ndarray,
+        done: np.ndarray,
+        action_log_prob: np.ndarray,
     ):
         """
-        Stores a single transition in the experience buffer.
+        Stores a batch of transitions in the experience buffer.
 
         Parameters
         ----------
         state : np.ndarray
-            The state observed.
-        action : int
-            The action taken.
-        reward : float
-            The reward received.
-        value : float
-            The value estimate of the state.
-        done : bool
-            Whether the episode terminated after this transition.
-        action_log_prob : float
-            The log probability of the action taken.
+            Batch of states observed. Shape: (num_envs, *obs_shape)
+        action : np.ndarray
+            Batch of actions taken. Shape: (num_envs,)
+        reward : np.ndarray
+            Batch of rewards received. Shape: (num_envs,)
+        value : np.ndarray
+            Batch of value estimates of the states. Shape: (num_envs,)
+        done : np.ndarray
+            Batch of done flags. Shape: (num_envs,)
+        action_log_prob : np.ndarray
+            Batch of log probabilities of the actions taken. Shape: (num_envs,)
         """
         self.buffer.store(state, action, reward, value, done, action_log_prob)
 
     def learn(self, last_state: Optional[np.ndarray] = None):
         """
-        Performs the PPO learning update step.
+        Performs the PPO learning update step using collected batch experiences.
 
         Computes advantages and returns for the collected trajectory, then updates the policy
         and value networks using mini-batch gradient descent over multiple epochs based on
@@ -192,19 +206,41 @@ class PPOAgent:
         Parameters
         ----------
         last_state : Optional[np.ndarray], optional
-            The final state observed after the last step of the trajector.
+            The batch of final states observed after the last step of the trajectory
+            from each parallel environment. Shape: (num_envs, *obs_shape) or None.
             Default is None.
         """
-        # ##: Estimate the value of the last state for GAE calculation.
-        last_value = 0.0
+        # ##: Estimate the value of the last states for GAE calculation.
+        last_values = np.zeros(self.buffer.num_envs)
         if last_state is not None:
-            processed_last_state = self._preprocess_state(last_state)
-            last_value = self.value_network(processed_last_state, training=False).numpy()[0, 0]
+            # ##: Ensure last_state has the correct shape (num_envs, *obs_shape).
+            if len(last_state.shape) == len(self.obs_shape):
+                last_state = np.expand_dims(last_state, 0)
+            elif last_state.shape[0] != self.buffer.num_envs:
+                logger.warning(
+                    f"last_state batch size ({last_state.shape[0]}) doesn't match num_envs ({self.buffer.num_envs})."
+                )
+                processed_last_states = self._preprocess_state(last_state)
+                last_values_tensor = self.value_network(processed_last_states, training=False)
+                last_values.fill(tf.reduce_mean(last_values_tensor).numpy())
+                last_state = None
 
-        # ##: Compute advantages and returns for the collected trajectory.
-        self.buffer.compute_advantages_and_returns(last_value)
+            if last_state is not None:
+                processed_last_states = self._preprocess_state(last_state)
+                last_values_tensor = self.value_network(processed_last_states, training=False)
+                last_values = tf.squeeze(last_values_tensor).numpy()
 
-        # ##: Get batched data.
+                if self.buffer.num_envs == 1 and last_values.ndim == 0:
+                    last_values = np.expand_dims(last_values, 0)
+
+            processed_last_states = self._preprocess_state(last_state)
+            last_values = self.value_network(processed_last_states, training=False)
+            last_values = tf.squeeze(last_values).numpy()
+
+        # ##: Compute advantages and returns using the batch of last values.
+        self.buffer.compute_advantages_and_returns(last_values)
+
+        # ##: Get batched data. Buffer needs modification.
         dataset = self.buffer.get_batches(self.batch_size)
 
         # ##: Perform optimization over multiple epochs.
