@@ -4,7 +4,7 @@ Base Maze Environment for MiniGrid Curriculum Learning.
 A very simple maze, intended as the starting point for training.
 """
 
-from .maze import Maze
+from maze.envs.maze import Maze
 
 
 class BaseMaze(Maze):

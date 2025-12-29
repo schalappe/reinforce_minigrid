@@ -4,7 +4,7 @@ Hard Maze Environment for MiniGrid Curriculum Learning.
 A larger and potentially more complex maze.
 """
 
-from .maze import Maze
+from maze.envs.maze import Maze
 
 
 class HardMaze(Maze):
