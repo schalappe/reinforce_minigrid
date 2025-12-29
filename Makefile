@@ -9,7 +9,7 @@ MODEL_PREFIX ?= ./models/ppo_maze_final
 OUTPUT_GIF ?= evaluation_render.gif
 LEVEL ?= easy
 
-.PHONY: all help train visualize manual install-deps lint format typecheck clean sync
+.PHONY: all help train visualize manual install-deps lint format typecheck clean sync quality
 
 all: help
 
@@ -55,7 +55,7 @@ format:
 	uv run ruff check --fix maze/ reinforce/ tests/
 
 typecheck:
-	uv run pyrefly check maze/ reinforce/
+	uv run pyrefly check maze/ reinforce/ tests/
 
 quality: format lint typecheck
 

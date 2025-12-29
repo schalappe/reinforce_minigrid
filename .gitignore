@@ -147,6 +147,3 @@ cython_debug/
 # Special repositories
 models/
 CLAUDE.md
-
-# uv
-uv.lock
