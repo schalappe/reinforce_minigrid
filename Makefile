@@ -9,7 +9,7 @@ MODEL_PREFIX ?= ./models/ppo_maze_final
 OUTPUT_GIF ?= evaluation_render.gif
 LEVEL ?= easy
 
-.PHONY: all help train visualize manual install-deps lint format clean
+.PHONY: all help train visualize manual install-deps lint format typecheck clean sync quality
 
 all: help
 
@@ -19,34 +19,45 @@ help:
 	@echo "  visualize   - Generate evaluation GIF from trained model"
 	@echo "  manual      - Start manual control interface"
 	@echo "  install-deps- Install Python dependencies"
-	@echo "  lint        - Run static code analysis"
-	@echo "  format      - Format source code"
+	@echo "  sync        - Sync dependencies (install + update lockfile)"
+	@echo "  lint        - Run static code analysis (ruff)"
+	@echo "  format      - Format source code (ruff)"
+	@echo "  typecheck   - Run type checking (pyrefly)"
 	@echo "  clean       - Remove generated files"
 
 train:
-	python -m reinforce.train \
+	uv run python -m reinforce.train \
 		--config $(CONFIG) \
 		--total-timesteps $(TOTAL_TIMESTEPS) \
 		--steps-per-update $(STEPS_PER_UPDATE) \
 		--num-envs $(NUM_ENVS)
 
 visualize:
-	python -m reinforce.visualize \
+	uv run python -m reinforce.visualize \
 		--model-prefix $(MODEL_PREFIX) \
 		--output-gif $(OUTPUT_GIF) \
 		--level $(LEVEL)
 
 manual:
-	python manual.py
+	uv run python manual.py
 
 install-deps:
-	poetry install
+	uv sync --all-groups
+
+sync:
+	uv sync --all-groups
 
 lint:
-	pylint maze/ reinforce/ tests/
+	uv run ruff check maze/ reinforce/ tests/
 
 format:
-	black maze/ reinforce/ tests/
+	uv run ruff format maze/ reinforce/ tests/
+	uv run ruff check --fix maze/ reinforce/ tests/
+
+typecheck:
+	uv run pyrefly check maze/ reinforce/ tests/
+
+quality: format lint typecheck
 
 clean:
 	rm -rf models/*.keras *.gif

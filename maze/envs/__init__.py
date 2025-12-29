@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Initialize the maze environments module.
 

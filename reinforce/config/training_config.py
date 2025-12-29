@@ -1,10 +1,8 @@
-# -*- coding: utf-8 -*-
 """
 Dataclass definitions for PPO training configuration.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -96,7 +94,7 @@ class LoggingConfig:
     log_interval: int = 1
     save_interval: int = 10
     save_path: str = "models/ppo_maze"
-    load_path: Optional[str] = None
+    load_path: str | None = None
 
 
 @dataclass

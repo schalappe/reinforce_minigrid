@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Experience replay buffer for PPO, optimized for vectorized environments.
 

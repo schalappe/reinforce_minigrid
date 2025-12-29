@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Main training script for the PPO agent on the MiniGrid Maze environment.
 """
@@ -8,7 +7,8 @@ import multiprocessing as mp
 import os
 import time
 from collections import deque
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import tensorflow as tf

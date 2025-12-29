@@ -1,60 +1,68 @@
-[tool.poetry]
+[project]
 name = "reinforce-minigrid"
 version = "0.1.0"
 description = "Explore reinforcement learning with minigrid"
-authors = ["Kone Abdallah Hakim"]
-license = "MIT"
+authors = [{name = "Kone Abdallah Hakim"}]
+license = {text = "MIT"}
 readme = "README.md"
-packages = [{include = "maze"}]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "tensorflow>=2.19.0",
+    "minigrid==3.0.0",
+    "rich>=13.3.3",
+    "tqdm>=4.65.0",
+    "pillow>=11.1.0",
+    "gymnasium>=1.1.1",
+    "pyyaml>=6.0.2",
+    "matplotlib>=3.10.1",
+    "imageio>=2.37.0",
+    "keras>=3.9.1",
+    "loguru>=0.7.3",
+    "tensorflow-probability[tf]>=0.25.0",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.10,<3.14"
-tensorflow = "^2.19.0"
-minigrid = "3.0.0"
-rich = "^13.3.3"
-tqdm = "^4.65.0"
-pillow = "^11.1.0"
-gymnasium = "^1.1.1"
-pyyaml = "^6.0.2"
-matplotlib = "^3.10.1"
-imageio = "^2.37.0"
-keras = "^3.9.1"
-loguru = "^0.7.3"
-tensorflow-probability = {version = "^0.25.0", extras = ["tf"]}
+[dependency-groups]
+dev = [
+    "ruff>=0.8.0",
+    "pyrefly>=0.16.0",
+    # ##>: tensorflow-metal only available on macOS ARM64 with Python 3.10-3.12.
+    "tensorflow-metal>=1.2.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
 
-[tool.poetry.group.dev.dependencies]
-isort = "^5.12.0"
-black = "^23.3.0"
-pylint = "^3.3.6"
-tensorflow-metal = "^1.2.0"
-
-[tool.black]
+[tool.ruff]
 line-length = 119
-target-version = ['py310']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-    \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-)/
-'''
+target-version = "py312"
 
-[tool.isort]
-profile = "black"
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # function call in default argument (common in FastAPI)
+    "B905",   # zip without explicit strict parameter
+]
 
-[tool.pylint.messages_control]
-max-line-length = 119
-disable = ["E0401", "E0611", "W0613", "R0903"]
+[tool.ruff.lint.isort]
+known-first-party = ["maze", "reinforce", "tests"]
 
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.pyrefly]
+project-includes = ["maze", "reinforce", "tests"]
+# ##>: TensorFlow/Keras lack maintained type stubs.
+replace-imports-with-any = ["tensorflow.*", "keras.*", "tensorflow_probability.*"]
+
+[tool.pyrefly.errors]
+# ##>: Suppress untyped import warnings for ML libraries without stubs.
+untyped-import = false

@@ -145,5 +145,5 @@ dmypy.json
 cython_debug/
 
 # Special repositories
-.roo
 models/
+CLAUDE.md

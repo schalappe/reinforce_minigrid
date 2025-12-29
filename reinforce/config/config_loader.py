@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Handles loading and merging of configuration from YAML files and command-line arguments.
 """
@@ -7,7 +6,7 @@ import argparse
 import dataclasses
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional, Type, TypeVar
+from typing import Any, Optional, TypeVar
 
 import yaml
 from loguru import logger
@@ -17,7 +16,7 @@ from .training_config import MainConfig
 T = TypeVar("T")
 
 
-def _load_yaml(path: Path) -> Dict[str, Any]:
+def _load_yaml(path: Path) -> dict[str, Any]:
     """
     Load configuration data from a YAML file.
 
@@ -41,14 +40,14 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
         logger.error(f"Configuration file not found: {path}")
         sys.exit(1)
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     except yaml.YAMLError as e:
         logger.error(f"Error parsing YAML file {path}: {e}")
         sys.exit(1)
 
 
-def _map_yaml_to_dataclass_field(dataclass_type: Type[Any], yaml_key: str) -> str:
+def _map_yaml_to_dataclass_field(dataclass_type: type[Any], yaml_key: str) -> str:
     """
     Map a YAML key to its corresponding dataclass field name.
 
@@ -73,7 +72,7 @@ def _map_yaml_to_dataclass_field(dataclass_type: Type[Any], yaml_key: str) -> st
     return yaml_key
 
 
-def _dict_to_dataclass(dataclass_type: Type[T], data: Dict[str, Any]) -> T:
+def _dict_to_dataclass(dataclass_type: type[T], data: dict[str, Any]) -> T:
     """
     Recursively convert a dictionary to a nested dataclass structure.
 
@@ -169,8 +168,8 @@ def _dict_to_dataclass(dataclass_type: Type[T], data: Dict[str, Any]) -> T:
 
 
 def load_config(
-    config_path: Optional[str] = None,
-    args: Optional[argparse.Namespace] = None,
+    config_path: str | None = None,
+    args: argparse.Namespace | None = None,
 ) -> MainConfig:
     """
     Load configuration from YAML and CLI overrides.
