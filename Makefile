@@ -57,7 +57,7 @@ format:
 typecheck:
 	uv run pyrefly check maze/ reinforce/
 
-quality: lint format typecheck
+quality: format lint typecheck
 
 clean:
 	rm -rf models/*.keras *.gif

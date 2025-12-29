@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Maze Environment for MiniGrid.
 
@@ -6,7 +5,7 @@ A maze environment using the ``MiniGrid`` framework, where an agent must navigat
 to a green goal ball placed in a random room. The maze consists of a grid of rooms connected by doors.
 """
 
-from typing import Any, Dict, Optional, SupportsFloat, Tuple
+from typing import Any, SupportsFloat
 
 from minigrid.core.world_object import WorldObj
 from minigrid.envs.babyai.core.roomgrid_level import RoomGridLevel
@@ -66,16 +65,16 @@ class Maze(RoomGridLevel):
         """
         self.num_dists = num_dists
         self.doors_open = doors_open
-        self.instrs: Optional[GoToInstr] = None
-        self.visited: Dict[Tuple[int, int], int] = {}
-        self.distance: Optional[int] = None
-        self.goal_position: Tuple[int, int] = ()
-        self.current_room: Optional[Tuple[int, int]] = None
-        self.goal_room: Optional[Tuple[int, int]] = None
+        self.instrs: GoToInstr | None = None
+        self.visited: dict[tuple[int, int], int] = {}
+        self.distance: int | None = None
+        self.goal_position: tuple[int, int] = ()
+        self.current_room: tuple[int, int] | None = None
+        self.goal_room: tuple[int, int] | None = None
         self.room_transitions: int = 0
         super().__init__(num_rows=num_rows, num_cols=num_cols, room_size=room_size, **kwargs)
 
-    def get_room_coords(self, x: int, y: int) -> Tuple[int, int]:
+    def get_room_coords(self, x: int, y: int) -> tuple[int, int]:
         """
         Get the room coordinates (i, j) containing the grid position (x, y).
 
@@ -148,7 +147,7 @@ class Maze(RoomGridLevel):
 
         return total_reward
 
-    def step(self, action: Any) -> Tuple[object, SupportsFloat, bool, bool, Dict[str, Any]]:
+    def step(self, action: Any) -> tuple[object, SupportsFloat, bool, bool, dict[str, Any]]:
         """
         Execute one time step within the environment.
 

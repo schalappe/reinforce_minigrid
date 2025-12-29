@@ -1,9 +1,11 @@
-# -*- coding: utf-8 -*-
 """Test model."""
+
 import unittest
-from reinforce.model import A2CModel
+
 import numpy as np
 import tensorflow as tf
+
+from reinforce.model import A2CModel
 
 
 class TestA2CModel(unittest.TestCase):
@@ -27,5 +29,5 @@ class TestA2CModel(unittest.TestCase):
         self.assertIsInstance(value.numpy()[0, 0], np.float32)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

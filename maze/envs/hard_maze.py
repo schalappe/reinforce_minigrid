@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Hard Maze Environment for MiniGrid Curriculum Learning.
 

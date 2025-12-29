@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 PPO Agent implementation using TensorFlow.
 
@@ -6,7 +5,6 @@ Combines the policy/value networks, buffer, and PPO training logic.
 """
 
 from pathlib import Path
-from typing import Optional, Tuple
 
 import gymnasium as gym
 import numpy as np
@@ -127,7 +125,7 @@ class PPOAgent:
         """
         return tf.convert_to_tensor(state, dtype=tf.float32)
 
-    def get_action(self, state: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def get_action(self, state: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Selects actions based on the current policy and a batch of states.
 
@@ -195,7 +193,7 @@ class PPOAgent:
         """
         self.buffer.store(state, action, reward, value, done, action_log_prob)
 
-    def learn(self, last_state: Optional[np.ndarray] = None):
+    def learn(self, last_state: np.ndarray | None = None):
         """
         Performs the PPO learning update step using collected batch experiences.
 
@@ -302,5 +300,5 @@ class PPOAgent:
             self.policy_network = tf.keras.models.load_model(policy_path)
             self.value_network = tf.keras.models.load_model(value_path)
             logger.info(f"Models loaded from {policy_path} and {value_path}")
-        except (FileNotFoundError, tf.errors.OpError, IOError) as exc:
+        except (OSError, FileNotFoundError, tf.errors.OpError) as exc:
             logger.warning(f"Error loading models from {policy_path} and {value_path}: {exc}.")

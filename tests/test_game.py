@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Test game module for the MazeGame class.
 """

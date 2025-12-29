@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
 """
 Script to evaluate a trained PPO agent in the MiniGrid Maze environment and save the rendering as a GIF.
 """
 
 import os
 import random
-from typing import Callable, Dict
+from collections.abc import Callable
 
 import click
 import imageio
@@ -18,7 +17,7 @@ from maze.envs import BaseMaze, EasyMaze, HardMaze, MediumMaze
 from reinforce import setup_logger
 from reinforce.agent import PPOAgent
 
-ENVS: Dict[str, Callable] = {
+ENVS: dict[str, Callable] = {
     "base": BaseMaze,
     "easy": EasyMaze,
     "medium": MediumMaze,

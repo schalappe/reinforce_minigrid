@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 REINFORCE Agent Training Module.
 

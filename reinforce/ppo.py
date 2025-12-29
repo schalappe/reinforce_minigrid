@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Core PPO Algorithm Implementation using TensorFlow.
 
 This module provides the core components for the Proximal Policy Optimization (PPO) algorithm, specificall
