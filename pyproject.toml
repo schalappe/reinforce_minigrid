@@ -51,7 +51,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["maze", "reinforce"]
+known-first-party = ["maze", "reinforce", "tests"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -59,7 +59,7 @@ indent-style = "space"
 docstring-code-format = true
 
 [tool.pyrefly]
-project-includes = ["maze", "reinforce"]
+project-includes = ["maze", "reinforce", "tests"]
 # ##>: TensorFlow/Keras lack maintained type stubs.
 replace-imports-with-any = ["tensorflow.*", "keras.*", "tensorflow_probability.*"]
 
