@@ -19,6 +19,7 @@ dependencies = [
     "keras>=3.9.1",
     "loguru>=0.7.3",
     "tensorflow-probability[tf]>=0.25.0",
+    "click>=8.1.0",
 ]
 
 [dependency-groups]

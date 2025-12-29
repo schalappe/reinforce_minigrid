@@ -6,14 +6,12 @@ import argparse
 import dataclasses
 import sys
 from pathlib import Path
-from typing import Any, Optional, TypeVar
+from typing import Any, Optional
 
 import yaml
 from loguru import logger
 
 from .training_config import MainConfig
-
-T = TypeVar("T")
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -72,7 +70,7 @@ def _map_yaml_to_dataclass_field(dataclass_type: type[Any], yaml_key: str) -> st
     return yaml_key
 
 
-def _dict_to_dataclass(dataclass_type: type[T], data: dict[str, Any]) -> T:
+def _dict_to_dataclass[T](dataclass_type: type[T], data: dict[str, Any]) -> T:
     """
     Recursively convert a dictionary to a nested dataclass structure.
 
@@ -100,7 +98,8 @@ def _dict_to_dataclass(dataclass_type: type[T], data: dict[str, Any]) -> T:
         If instantiation fails due to missing required fields (those without defaults)
         or other `TypeError` during instantiation.
     """
-    field_types = {f.name: f.type for f in dataclasses.fields(dataclass_type)}
+    # ##&: Cast required because dataclasses.fields expects DataclassInstance, but type[T] is compatible at runtime.
+    field_types = {f.name: f.type for f in dataclasses.fields(dataclass_type)}  # type: ignore[arg-type]
     mapped_data = {}
 
     for yaml_key, value in data.items():
@@ -114,17 +113,18 @@ def _dict_to_dataclass(dataclass_type: type[T], data: dict[str, Any]) -> T:
         # ##: Handle nested dataclasses.
         if dataclasses.is_dataclass(field_type):
             if isinstance(value, dict):
-                mapped_data[field_name] = _dict_to_dataclass(field_type, value)
+                mapped_data[field_name] = _dict_to_dataclass(field_type, value)  # type: ignore[arg-type]
             else:
+                field_type_name = getattr(field_type, "__name__", str(field_type))
                 logger.warning(
-                    f'Expected dict for nested config "{field_name}" ({field_type.__name__}), '
+                    f'Expected dict for nested config "{field_name}" ({field_type_name}), '
                     f"got {type(value)}. Using defaults."
                 )
-                mapped_data[field_name] = field_type()
+                mapped_data[field_name] = field_type()  # type: ignore[operator]
         # ##: Handle Optional types.
         elif hasattr(field_type, "__origin__") and field_type.__origin__ is Optional:
-            inner_type = field_type.__args__[0]
-            if value is None or isinstance(value, inner_type):
+            inner_type = field_type.__args__[0]  # type: ignore[union-attr]
+            if value is None or isinstance(value, inner_type):  # type: ignore[arg-type]
                 mapped_data[field_name] = value
             else:
                 logger.warning(
@@ -133,9 +133,10 @@ def _dict_to_dataclass(dataclass_type: type[T], data: dict[str, Any]) -> T:
                 mapped_data[field_name] = None
         else:
             # ##: Basic type conversion/assignment.
-            if not isinstance(value, field_type):
+            # ##&: field_type may be a string (forward ref) or actual type at runtime.
+            if not isinstance(value, field_type):  # type: ignore[arg-type]
                 try:
-                    mapped_data[field_name] = field_type(value)
+                    mapped_data[field_name] = field_type(value)  # type: ignore[operator]
                 except (TypeError, ValueError):
                     logger.warning(
                         f'Type mismatch for "{field_name}". '
@@ -147,14 +148,14 @@ def _dict_to_dataclass(dataclass_type: type[T], data: dict[str, Any]) -> T:
                 mapped_data[field_name] = value
 
     # ##: Instantiate the dataclass with potentially missing fields relying on defaults.
+    valid_keys = {f.name for f in dataclasses.fields(dataclass_type)}  # type: ignore[arg-type]
+    filtered_data = {k: v for k, v in mapped_data.items() if k in valid_keys}
     try:
-        valid_keys = {f.name for f in dataclasses.fields(dataclass_type)}
-        filtered_data = {k: v for k, v in mapped_data.items() if k in valid_keys}
         return dataclass_type(**filtered_data)
     except TypeError as e:
         logger.error(f"Error instantiating {dataclass_type.__name__}: {e}. Check config structure and types.")
         missing_fields = []
-        for f in dataclasses.fields(dataclass_type):
+        for f in dataclasses.fields(dataclass_type):  # type: ignore[arg-type]
             if (
                 f.default is dataclasses.MISSING
                 and f.default_factory is dataclasses.MISSING
@@ -244,6 +245,7 @@ def load_config(
             if hasattr(args, arg_name) and getattr(args, arg_name) is not None:
                 override_value = getattr(args, arg_name)
                 if config_key == "lambda_gae":
+                    yaml_name = "lambda_gae"
                     for field in dataclasses.fields(MainConfig.ppo.__class__):
                         if field.name == "lambda_gae":
                             yaml_name = field.metadata.get("yaml_name", "lambda_gae")

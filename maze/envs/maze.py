@@ -68,7 +68,7 @@ class Maze(RoomGridLevel):
         self.instrs: GoToInstr | None = None
         self.visited: dict[tuple[int, int], int] = {}
         self.distance: int | None = None
-        self.goal_position: tuple[int, int] = ()
+        self.goal_position: tuple[int, int] = (0, 0)
         self.current_room: tuple[int, int] | None = None
         self.goal_room: tuple[int, int] | None = None
         self.room_transitions: int = 0
@@ -134,10 +134,11 @@ class Maze(RoomGridLevel):
 
         # ##: Calculate exploration bonus.
         exploration_bonus = 0
-        visit_count = self.visited.get(self.agent_pos, 0)
+        agent_pos_key = (int(self.agent_pos[0]), int(self.agent_pos[1]))
+        visit_count = self.visited.get(agent_pos_key, 0)
         if visit_count == 0:
             exploration_bonus = 0.05
-        self.visited[self.agent_pos] = visit_count + 1
+        self.visited[agent_pos_key] = visit_count + 1
 
         # ##: Standard step penalty.
         step_penalty = -0.01
@@ -201,7 +202,7 @@ class Maze(RoomGridLevel):
         goal_obj, self.goal_position = self.add_object(room_i, room_j, "ball", "green")
         return goal_obj
 
-    def gen_mission(self):
+    def gen_mission(self) -> None:  # type: ignore[override]
         """
         Generate a new mission (episode).
 

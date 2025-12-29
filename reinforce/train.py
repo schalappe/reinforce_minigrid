@@ -8,7 +8,7 @@ import os
 import time
 from collections import deque
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypedDict
 
 import numpy as np
 import tensorflow as tf
@@ -20,14 +20,25 @@ from minigrid.wrappers import ImgObsWrapper
 from maze.envs.base_maze import BaseMaze
 from maze.envs.easy_maze import EasyMaze
 from maze.envs.hard_maze import HardMaze
+from maze.envs.maze import Maze
 from maze.envs.medium_maze import MediumMaze
 
 from . import setup_logger
 from .agent import PPOAgent
 from .config import MainConfig, load_config
 
+
+class CurriculumStage(TypedDict):
+    """Type definition for a curriculum stage configuration."""
+
+    name: str
+    env_class: type[Maze]
+    threshold: float | None
+    max_steps: int | None
+
+
 # ##: Define the curriculum
-CURRICULUM = [
+CURRICULUM: list[CurriculumStage] = [
     {"name": "BaseMaze", "env_class": BaseMaze, "threshold": 0.5, "max_steps": 500_000},
     {"name": "EasyMaze", "env_class": EasyMaze, "threshold": 1.0, "max_steps": 500_000},
     {"name": "MediumMaze", "env_class": MediumMaze, "threshold": 2.0, "max_steps": 1_000_000},
@@ -35,25 +46,24 @@ CURRICULUM = [
 ]
 
 
-def create_env(env_class: Callable[..., Any]) -> Env:
+def create_env(env_class: type[Maze]) -> Callable[[], Env[Any, Any]]:
     """
     Helper function to create and wrap the environment.
 
     Parameters
     ----------
-    env_class : Callable[..., Any]
+    env_class : type[BaseMaze]
         The environment class to instantiate and wrap.
 
     Returns
     -------
-    env : gym.Env
-        The wrapped environment.
+    Callable[[], Env]
+        A factory function that creates and returns a wrapped environment.
     """
 
     # ##: This function will be used by the vector env.
-    def make_env():
-        env = ImgObsWrapper(env_class(render_mode="rgb_array"))
-        return env
+    def make_env() -> Env[Any, Any]:
+        return ImgObsWrapper(env_class(render_mode="rgb_array"))
 
     return make_env
 
@@ -183,7 +193,7 @@ def train(config: MainConfig):
             next_obs_batch, rewards_batch, terminated_batch, truncated_batch, _ = env.step(actions)
 
             # ##: Store transitions for the batch. Agent needs modification.
-            dones_batch = terminated_batch | truncated_batch
+            dones_batch = np.logical_or(terminated_batch, truncated_batch)
             agent.store_transition(current_obs, actions, rewards_batch, values, dones_batch, action_probs)
 
             # ##: Update current observations.

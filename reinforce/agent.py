@@ -79,12 +79,14 @@ class PPOAgent:
         steps_per_update : int, optional
             Number of steps collected per environment before an update. Default is 2048.
         """
-        self.obs_shape = observation_space.shape
-        self.input_shape = observation_space.shape
+        if observation_space.shape is None:
+            raise ValueError("Observation space must have a defined shape.")
+        self.obs_shape: tuple[int, ...] = observation_space.shape
+        self.input_shape: tuple[int, ...] = observation_space.shape
 
         if not isinstance(action_space, gym.spaces.Discrete):
             raise ValueError("PPOAgent currently only supports Discrete action spaces.")
-        self.num_actions = action_space.n
+        self.num_actions: int = int(action_space.n)
 
         # ##: Store hyperparameters.
         self.gamma = gamma
@@ -211,29 +213,27 @@ class PPOAgent:
         # ##: Estimate the value of the last states for GAE calculation.
         last_values = np.zeros(self.buffer.num_envs)
         if last_state is not None:
+            current_last_state: np.ndarray = last_state
             # ##: Ensure last_state has the correct shape (num_envs, *obs_shape).
-            if len(last_state.shape) == len(self.obs_shape):
-                last_state = np.expand_dims(last_state, 0)
-            elif last_state.shape[0] != self.buffer.num_envs:
+            if len(current_last_state.shape) == len(self.obs_shape):
+                current_last_state = np.expand_dims(current_last_state, 0)
+            elif current_last_state.shape[0] != self.buffer.num_envs:
                 logger.warning(
-                    f"last_state batch size ({last_state.shape[0]}) doesn't match num_envs ({self.buffer.num_envs})."
+                    f"last_state batch size ({current_last_state.shape[0]}) doesn't match "
+                    f"num_envs ({self.buffer.num_envs})."
                 )
-                processed_last_states = self._preprocess_state(last_state)
+                processed_last_states = self._preprocess_state(current_last_state)
                 last_values_tensor = self.value_network(processed_last_states, training=False)
                 last_values.fill(tf.reduce_mean(last_values_tensor).numpy())
-                last_state = None
+                current_last_state = None  # type: ignore[assignment]
 
-            if last_state is not None:
-                processed_last_states = self._preprocess_state(last_state)
+            if current_last_state is not None:
+                processed_last_states = self._preprocess_state(current_last_state)
                 last_values_tensor = self.value_network(processed_last_states, training=False)
                 last_values = tf.squeeze(last_values_tensor).numpy()
 
                 if self.buffer.num_envs == 1 and last_values.ndim == 0:
                     last_values = np.expand_dims(last_values, 0)
-
-            processed_last_states = self._preprocess_state(last_state)
-            last_values = self.value_network(processed_last_states, training=False)
-            last_values = tf.squeeze(last_values).numpy()
 
         # ##: Compute advantages and returns using the batch of last values.
         self.buffer.compute_advantages_and_returns(last_values)
