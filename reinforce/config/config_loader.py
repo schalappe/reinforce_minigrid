@@ -220,7 +220,7 @@ def load_config(
         else:
             logger.warning(f"Ignoring unknown top-level key {key} in YAML config.")
 
-    # ##: 4. Apply command-line overrides if args are provided.
+    # ##>: Apply command-line overrides if args are provided.
     if args:
         logger.info("Applying command-line overrides...")
         arg_map = {
@@ -235,12 +235,21 @@ def load_config(
             "vf_coef": ("ppo", "value_coef"),
             "epochs": ("ppo", "epochs"),
             "batch_size": ("ppo", "batch_size"),
+            "max_grad_norm": ("ppo", "max_grad_norm"),
             "seed": ("environment", "seed"),
             "log_interval": ("logging", "log_interval"),
             "save_interval": ("logging", "save_interval"),
             "save_path": ("logging", "save_path"),
             "load_path": ("logging", "load_path"),
         }
+
+        # ##>: Handle boolean flags separately.
+        if hasattr(args, "no_lr_annealing") and args.no_lr_annealing:
+            config_dict["ppo"]["use_lr_annealing"] = False
+            logger.debug("Disabling learning rate annealing via CLI flag")
+        if hasattr(args, "use_value_clipping") and args.use_value_clipping:
+            config_dict["ppo"]["use_value_clipping"] = True
+            logger.debug("Enabling value function clipping via CLI flag")
         for arg_name, (section, config_key) in arg_map.items():
             if hasattr(args, arg_name) and getattr(args, arg_name) is not None:
                 override_value = getattr(args, arg_name)

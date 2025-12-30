@@ -1,6 +1,4 @@
-"""
-Dataclass definitions for PPO training configuration.
-"""
+"""Dataclass definitions for PPO training configuration."""
 
 from dataclasses import dataclass, field
 
@@ -27,7 +25,7 @@ class PPOHyperparameters:
     Attributes
     ----------
     learning_rate : float, optional
-        Learning rate for the Adam optimizer. Default is 3e-4.
+        Initial learning rate for the Adam optimizer. Default is 2.5e-4.
     gamma : float, optional
         Discount factor for future rewards. Default is 0.99.
     lambda_gae : float, optional
@@ -39,19 +37,28 @@ class PPOHyperparameters:
     value_coef : float, optional
         Coefficient for the value function loss. Default is 0.5.
     epochs : int, optional
-        Number of optimization epochs per learning update. Default is 10.
+        Number of optimization epochs per learning update. Default is 4.
     batch_size : int, optional
-        Mini-batch size for optimization. Default is 64.
+        Mini-batch size for optimization. Default is 256.
+    max_grad_norm : float, optional
+        Maximum gradient norm for clipping. Default is 0.5.
+    use_lr_annealing : bool, optional
+        Whether to anneal learning rate to 0. Default is True.
+    use_value_clipping : bool, optional
+        Whether to clip value function updates. Default is False.
     """
 
-    learning_rate: float = 3e-4
+    learning_rate: float = 2.5e-4
     gamma: float = 0.99
     lambda_gae: float = field(default=0.95, metadata={"yaml_name": "lambda"})
     clip_param: float = 0.2
     entropy_coef: float = 0.01
     value_coef: float = field(default=0.5, metadata={"yaml_name": "vf_coef"})
-    epochs: int = 10
-    batch_size: int = 64
+    epochs: int = 4
+    batch_size: int = 256
+    max_grad_norm: float = 0.5
+    use_lr_annealing: bool = True
+    use_value_clipping: bool = False
 
 
 @dataclass
@@ -62,16 +69,16 @@ class TrainingConfig:
     Attributes
     ----------
     total_timesteps : int, optional
-        Total number of environment steps to train for. Default is 1,000,000.
+        Total number of environment steps to train for. Default is 3,000,000.
     steps_per_update : int, optional
-        Number of steps collected from the environment before each agent learning update. Default is 2048.
+        Number of steps collected from the environment before each agent learning update. Default is 128.
     num_envs : int, optional
-        Number of parallel environments to use for experience collection. Default is 4.
+        Number of parallel environments to use for experience collection. Default is 8.
     """
 
-    total_timesteps: int = 1_000_000
-    steps_per_update: int = 2048
-    num_envs: int = 4
+    total_timesteps: int = 3_000_000
+    steps_per_update: int = 128
+    num_envs: int = 8
 
 
 @dataclass
@@ -119,7 +126,13 @@ class MainConfig:
     ppo: PPOHyperparameters = field(default_factory=PPOHyperparameters)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Perform validation after initialization."""
         if self.ppo.learning_rate <= 0:
             raise ValueError("Learning rate must be positive.")
+        if self.ppo.max_grad_norm <= 0:
+            raise ValueError("max_grad_norm must be positive.")
+        if not 0 < self.ppo.gamma <= 1:
+            raise ValueError("gamma must be in (0, 1].")
+        if not 0 < self.ppo.lambda_gae <= 1:
+            raise ValueError("lambda_gae must be in (0, 1].")

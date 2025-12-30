@@ -1,5 +1,8 @@
 """
 Main training script for the PPO agent on the MiniGrid Maze environment.
+
+Implements curriculum learning with modern PPO enhancements including
+learning rate annealing, gradient clipping, and IMPALA-style networks.
 """
 
 import argparse
@@ -22,10 +25,9 @@ from maze.envs.easy_maze import EasyMaze
 from maze.envs.hard_maze import HardMaze
 from maze.envs.maze import Maze
 from maze.envs.medium_maze import MediumMaze
-
-from . import setup_logger
-from .agent import PPOAgent
-from .config import MainConfig, load_config
+from reinforce import setup_logger
+from reinforce.agent import PPOAgent
+from reinforce.config import MainConfig, load_config
 
 
 class CurriculumStage(TypedDict):
@@ -37,7 +39,7 @@ class CurriculumStage(TypedDict):
     max_steps: int | None
 
 
-# ##: Define the curriculum
+# ##>: Define the curriculum with adjusted thresholds for IMPALA network.
 CURRICULUM: list[CurriculumStage] = [
     {"name": "BaseMaze", "env_class": BaseMaze, "threshold": 0.5, "max_steps": 500_000},
     {"name": "EasyMaze", "env_class": EasyMaze, "threshold": 1.0, "max_steps": 500_000},
@@ -61,14 +63,13 @@ def create_env(env_class: type[Maze]) -> Callable[[], Env[Any, Any]]:
         A factory function that creates and returns a wrapped environment.
     """
 
-    # ##: This function will be used by the vector env.
     def make_env() -> Env[Any, Any]:
         return ImgObsWrapper(env_class(render_mode="rgb_array"))
 
     return make_env
 
 
-def train(config: MainConfig):
+def train(config: MainConfig) -> None:
     """
     Trains the PPO agent based on the provided configuration using curriculum learning.
 
@@ -79,7 +80,7 @@ def train(config: MainConfig):
         (environment, training, PPO hyperparameters, logging).
     """
     setup_logger()
-    logger.info("Starting PPO training with loaded configuration and curriculum learning...")
+    logger.info("Starting PPO training with modern enhancements and curriculum learning...")
     num_envs = config.training.num_envs
     logger.info(f"Number of parallel environments: {num_envs}")
     logger.info(f"Environment Seed: {config.environment.seed}")
@@ -93,25 +94,29 @@ def train(config: MainConfig):
         f"epochs={config.ppo.epochs}, batch_size={config.ppo.batch_size}"
     )
     logger.info(
+        f"Modern Enhancements: max_grad_norm={config.ppo.max_grad_norm}, "
+        f"lr_annealing={config.ppo.use_lr_annealing}, value_clipping={config.ppo.use_value_clipping}"
+    )
+    logger.info(
         f"Logging: Log Interval={config.logging.log_interval}, Save Interval={config.logging.save_interval}, "
         f"Save Path={config.logging.save_path}, Load Path={config.logging.load_path}"
     )
 
-    # ##: Seeding for reproducibility.
+    # ##>: Seeding for reproducibility.
     np.random.seed(config.environment.seed)
     tf.random.set_seed(config.environment.seed)
 
-    # ##: Curriculum setup.
+    # ##>: Curriculum setup.
     current_curriculum_index = 0
     current_stage = CURRICULUM[current_curriculum_index]
     stage_name = current_stage["name"]
     logger.info(f"Starting curriculum stage 1: {stage_name}")
 
-    # ##: Create vectorized environment.
+    # ##>: Create vectorized environment.
     env_fns = [create_env(current_stage["env_class"]) for _ in range(num_envs)]
 
-    # ##: Determine the appropriate multiprocessing context.
-    context_method = "fork"  # Default to 'fork'
+    # ##>: Determine the appropriate multiprocessing context.
+    context_method = "fork"
     try:
         mp.get_context("fork")
     except ValueError:
@@ -121,7 +126,7 @@ def train(config: MainConfig):
     env = AsyncVectorEnv(env_fns, context=context_method)
     logger.info(f"Using {type(env).__name__} with context '{context_method}'")
 
-    # ##: Initialize agent (Observation/Action space is the same for single env in vector).
+    # ##>: Initialize agent with new parameters.
     agent = PPOAgent(
         env.single_observation_space,
         env.single_action_space,
@@ -135,24 +140,28 @@ def train(config: MainConfig):
         batch_size=config.ppo.batch_size,
         num_envs=num_envs,
         steps_per_update=config.training.steps_per_update,
+        max_grad_norm=config.ppo.max_grad_norm,
+        total_timesteps=config.training.total_timesteps,
+        use_lr_annealing=config.ppo.use_lr_annealing,
+        use_value_clipping=config.ppo.use_value_clipping,
     )
 
-    # ##: Load pre-trained models if specified.
+    # ##>: Load pre-trained models if specified.
     if config.logging.load_path:
         logger.info(f"Loading models from {config.logging.load_path}...")
         agent.load_models(config.logging.load_path)
 
-    # ##: Prepare for saving models.
+    # ##>: Prepare for saving models.
     if config.logging.save_path:
         save_dir = os.path.dirname(config.logging.save_path)
         if save_dir:
             os.makedirs(save_dir, exist_ok=True)
         logger.info(f"Models will be saved to {config.logging.save_path}_*.keras")
 
-    # ##: Training loop variables for vectorized envs.
+    # ##>: Training loop variables for vectorized envs.
     current_obs, _ = env.reset(seed=config.environment.seed)
 
-    # ##: Track rewards and lengths per environment.
+    # ##>: Track rewards and lengths per environment.
     episode_rewards = np.zeros(num_envs, dtype=np.float32)
     episode_lengths = np.zeros(num_envs, dtype=np.int32)
     total_episodes = 0
@@ -160,9 +169,9 @@ def train(config: MainConfig):
     total_steps_overall = 0
     steps_in_current_stage = 0
 
-    # ##: Logging setup (track stats across all envs).
-    reward_deque = deque(maxlen=100 * num_envs)
-    length_deque = deque(maxlen=100 * num_envs)
+    # ##>: Logging setup (track stats across all envs).
+    reward_deque: deque[float] = deque(maxlen=100 * num_envs)
+    length_deque: deque[int] = deque(maxlen=100 * num_envs)
     start_time = time.time()
 
     logger.info("Starting training loop...")
@@ -175,45 +184,42 @@ def train(config: MainConfig):
             f"Stage: {stage_name}"
         )
 
-        # ##: Collect experience from parallel environments.
+        # ##>: Collect experience from parallel environments.
         steps_per_env = config.training.steps_per_update
         collected_steps_this_update = 0
-
-        # ##: We need to store the last observation for bootstrapping if the update ends mid-episode.
         last_obs_for_bootstrap = None
 
         for step in range(steps_per_env):
             if total_steps_overall >= config.training.total_timesteps:
                 break
 
-            # ##: Get actions, values, log probs for the batch of observations.
+            # ##>: Get actions, values, log probs for the batch of observations.
             actions, values, action_probs = agent.get_action(current_obs)
 
-            # ##: Step the vectorized environment.
+            # ##>: Step the vectorized environment.
             next_obs_batch, rewards_batch, terminated_batch, truncated_batch, _ = env.step(actions)
 
-            # ##: Store transitions for the batch. Agent needs modification.
+            # ##>: Store transitions for the batch.
             dones_batch = np.logical_or(terminated_batch, truncated_batch)
             agent.store_transition(current_obs, actions, rewards_batch, values, dones_batch, action_probs)
 
-            # ##: Update current observations.
+            # ##>: Update current observations.
             current_obs = next_obs_batch
 
-            # ##: Update episode trackers for each environment.
+            # ##>: Update episode trackers for each environment.
             episode_rewards += rewards_batch
             episode_lengths += 1
             total_steps_overall += num_envs
             steps_in_current_stage += num_envs
             collected_steps_this_update += num_envs
 
-            # ##: Handle episode ends for each environment.
+            # ##>: Handle episode ends for each environment.
             for i, done in enumerate(dones_batch):
                 if done:
-                    # ##: Log finished episode stats.
                     finished_reward = episode_rewards[i]
                     finished_length = episode_lengths[i]
-                    reward_deque.append(finished_reward)
-                    length_deque.append(finished_length)
+                    reward_deque.append(float(finished_reward))
+                    length_deque.append(int(finished_length))
                     total_episodes += 1
                     stage_name = current_stage["name"]
                     logger.debug(
@@ -221,13 +227,13 @@ def train(config: MainConfig):
                         f"Length: {finished_length}, Stage: {stage_name}"
                     )
 
-                    # ##: Reset individual trackers.
+                    # ##>: Reset individual trackers.
                     episode_rewards[i] = 0
                     episode_lengths[i] = 0
 
-                    # ##: Check curriculum advancement criteria.
+                    # ##>: Check curriculum advancement criteria.
                     if len(reward_deque) == reward_deque.maxlen:
-                        mean_reward = np.mean(reward_deque)
+                        mean_reward = np.mean(list(reward_deque))
                         stage_threshold = current_stage["threshold"]
                         stage_max_steps = current_stage["max_steps"]
                         advance_curriculum = False
@@ -240,9 +246,7 @@ def train(config: MainConfig):
                             )
                             advance_curriculum = True
                         elif stage_max_steps is not None and steps_in_current_stage >= stage_max_steps:
-                            logger.info(
-                                f"Stage {stage_name} max steps ({stage_max_steps}) reached across {num_envs} envs."
-                            )
+                            logger.info(f"Stage {stage_name} max steps ({stage_max_steps}) reached.")
                             advance_curriculum = True
 
                         if advance_curriculum and current_curriculum_index < len(CURRICULUM) - 1:
@@ -253,11 +257,9 @@ def train(config: MainConfig):
                                 f"Advancing to curriculum stage {current_curriculum_index + 1}: {stage_name}"
                             )
 
-                            # ##: Close old envs and create new ones for the next stage.
+                            # ##>: Close old envs and create new ones for the next stage.
                             env.close()
                             env_fns = [create_env(current_stage["env_class"]) for _ in range(num_envs)]
-
-                            # ##: Use the determined context_method string here
                             env = AsyncVectorEnv(env_fns, context=context_method)
 
                             current_obs, _ = env.reset()
@@ -269,27 +271,31 @@ def train(config: MainConfig):
                             last_obs_for_bootstrap = None
                             break
 
-            # ##: Store last observation for bootstrapping if update cycle ends.
+            # ##>: Store last observation for bootstrapping if update cycle ends.
             if step == steps_per_env - 1:
                 last_obs_for_bootstrap = next_obs_batch
 
-        # ##: Perform learning update only if steps were collected in this cycle.
+        # ##>: Perform learning update only if steps were collected in this cycle.
         if collected_steps_this_update > 0:
             logger.info(
                 f"Performing learning update for cycle {update_cycle} with {collected_steps_this_update} steps..."
             )
-            # ##: Agent needs modification to handle batch last_state.
-            agent.learn(last_state=last_obs_for_bootstrap)
-            logger.info("Learning update complete.")
+            metrics = agent.learn(last_state=last_obs_for_bootstrap, steps_collected=collected_steps_this_update)
+            logger.info(
+                f"Update complete | Policy Loss: {metrics['policy_loss']:.4f} | "
+                f"Value Loss: {metrics['value_loss']:.4f} | Entropy: {metrics['entropy']:.4f} | "
+                f"Clip Fraction: {metrics['clip_fraction']:.3f} | KL: {metrics['approx_kl']:.4f}"
+            )
         else:
             logger.info(f"Skipping learning update for cycle {update_cycle} as no steps were collected.")
 
-        # ##: Logging.
+        # ##>: Logging with enhanced metrics.
         if update_cycle % config.logging.log_interval == 0 and len(reward_deque) > 0:
-            mean_reward = np.mean(reward_deque)
-            mean_length = np.mean(length_deque)
+            mean_reward = np.mean(list(reward_deque))
+            mean_length = np.mean(list(length_deque))
             elapsed_time = time.time() - start_time
             fps = int(total_steps_overall / elapsed_time) if elapsed_time > 0 else 0
+            current_lr = agent.get_current_lr()
             stage_name = current_stage["name"]
             logger.info(
                 f"Timesteps: {total_steps_overall}/{config.training.total_timesteps} | "
@@ -299,18 +305,18 @@ def train(config: MainConfig):
                 f"Mean Reward (last {reward_deque.maxlen}): {mean_reward:.2f} | "
                 f"Mean Length (last {length_deque.maxlen}): {mean_length:.1f}"
             )
-            logger.info(f"FPS: {fps} | Elapsed Time: {elapsed_time:.2f}s")
+            logger.info(f"FPS: {fps} | LR: {current_lr:.2e} | Elapsed Time: {elapsed_time:.2f}s")
 
-        # ##: Save models periodically.
+        # ##>: Save models periodically.
         if config.logging.save_path and update_cycle % config.logging.save_interval == 0:
             save_file_path = f"{config.logging.save_path}_ts{total_steps_overall}_stage{current_curriculum_index}"
             logger.info(f"Saving models to {save_file_path}...")
             agent.save_models(save_file_path)
 
     logger.info("Training finished (total timesteps reached).")
-    env.close()  # Close the vector env
+    env.close()
 
-    # ##: Final model save.
+    # ##>: Final model save.
     if config.logging.save_path:
         final_save_path = f"{config.logging.save_path}_final_ts{total_steps_overall}_stage{current_curriculum_index}"
         logger.info(f"Saving final models to {final_save_path}...")
@@ -329,7 +335,7 @@ if __name__ == "__main__":
         help="Path to the YAML configuration file.",
     )
 
-    # ##: Keep override arguments if needed, but curriculum might make some less relevant.
+    # ##>: Override arguments for all hyperparameters.
     parser.add_argument("--total-timesteps", type=int, default=None, help="Override total training timesteps")
     parser.add_argument(
         "--steps-per-update", type=int, default=None, help="Override steps collected per environment per agent update"
@@ -343,6 +349,9 @@ if __name__ == "__main__":
     parser.add_argument("--vf-coef", type=float, default=None, help="Override value function loss coefficient")
     parser.add_argument("--epochs", type=int, default=None, help="Override PPO epochs per update")
     parser.add_argument("--batch-size", type=int, default=None, help="Override PPO batch size")
+    parser.add_argument("--max-grad-norm", type=float, default=None, help="Override max gradient norm")
+    parser.add_argument("--no-lr-annealing", action="store_true", help="Disable learning rate annealing")
+    parser.add_argument("--use-value-clipping", action="store_true", help="Enable value function clipping")
     parser.add_argument("--seed", type=int, default=None, help="Override random seed")
     parser.add_argument("--log-interval", type=int, default=None, help="Override log progress interval (in updates)")
     parser.add_argument("--save-interval", type=int, default=None, help="Override model save interval (in updates)")
