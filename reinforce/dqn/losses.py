@@ -64,8 +64,8 @@ def compute_target_distribution(
 
     # ##>: Projection: compute which atoms Tz falls between.
     b = (Tz - v_min) / delta_z
-    lower_idx = tf.cast(tf.floor(b), tf.int32)
-    upper_idx = tf.cast(tf.ceil(b), tf.int32)
+    lower_idx = tf.cast(tf.math.floor(b), tf.int32)
+    upper_idx = tf.cast(tf.math.ceil(b), tf.int32)
 
     # ##>: Handle edge case where lower_idx == upper_idx.
     lower_idx = tf.clip_by_value(lower_idx, 0, num_atoms - 1)

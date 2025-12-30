@@ -218,53 +218,50 @@ def train_step(
         A tuple containing the policy loss, value loss, entropy bonus,
         clip fraction, and approximate KL divergence for monitoring.
     """
-    # ##~: Force CPU execution to avoid Metal GPU compatibility issues on macOS.
-    # The Metal plugin doesn't support Expm1 operation used internally by tf.exp().
-    with tf.device("/CPU:0"):
-        # ##>: Mini-batch advantage normalization (per "37 Implementation Details").
-        advantages_normalized = (advantages - tf.reduce_mean(advantages)) / (tf.math.reduce_std(advantages) + 1e-8)
+    # ##>: Mini-batch advantage normalization (per "37 Implementation Details").
+    advantages_normalized = (advantages - tf.reduce_mean(advantages)) / (tf.math.reduce_std(advantages) + 1e-8)
 
-        with tf.GradientTape() as policy_tape:
-            # ##>: Forward pass to get current action distribution and log probabilities.
-            action_logits = policy_network(states, training=True)
-            dist = get_action_distribution(action_logits)
-            current_action_probs = dist.log_prob(actions)
+    with tf.GradientTape() as policy_tape:
+        # ##>: Forward pass to get current action distribution and log probabilities.
+        action_logits = policy_network(states, training=True)
+        dist = get_action_distribution(action_logits)
+        current_action_probs = dist.log_prob(actions)
 
-            # ##>: Calculate PPO policy loss.
-            pi_loss = ppo_policy_loss(current_action_probs, old_action_probs, advantages_normalized, clip_param)
+        # ##>: Calculate PPO policy loss.
+        pi_loss = ppo_policy_loss(current_action_probs, old_action_probs, advantages_normalized, clip_param)
 
-            # ##>: Calculate entropy bonus (we want to maximize entropy, so minimize negative entropy).
-            ent_bonus = entropy_bonus(dist)
+        # ##>: Calculate entropy bonus (we want to maximize entropy, so minimize negative entropy).
+        ent_bonus = entropy_bonus(dist)
 
-            # ##>: Total policy loss (including entropy bonus).
-            total_policy_loss = pi_loss - entropy_coef * ent_bonus
+        # ##>: Total policy loss (including entropy bonus).
+        total_policy_loss = pi_loss - entropy_coef * ent_bonus
 
-        policy_grads = policy_tape.gradient(total_policy_loss, policy_network.trainable_variables)
-        # ##>: Global gradient clipping for stability.
-        policy_grads = _clip_gradients(policy_grads, max_grad_norm)
-        policy_optimizer.apply_gradients(zip(policy_grads, policy_network.trainable_variables))
+    policy_grads = policy_tape.gradient(total_policy_loss, policy_network.trainable_variables)
+    # ##>: Global gradient clipping for stability.
+    policy_grads = _clip_gradients(policy_grads, max_grad_norm)
+    policy_optimizer.apply_gradients(zip(policy_grads, policy_network.trainable_variables))
 
-        with tf.GradientTape() as value_tape:
-            # ##>: Forward pass to get current value predictions.
-            values = value_network(states, training=True)
+    with tf.GradientTape() as value_tape:
+        # ##>: Forward pass to get current value predictions.
+        values = value_network(states, training=True)
 
-            # ##>: Calculate value function loss (with optional clipping).
-            v_loss = value_function_loss(values, returns, old_values, clip_param, use_value_clipping)
+        # ##>: Calculate value function loss (with optional clipping).
+        v_loss = value_function_loss(values, returns, old_values, clip_param, use_value_clipping)
 
-            # ##>: Total value loss (scaled by coefficient).
-            total_value_loss = v_loss * vf_coef
+        # ##>: Total value loss (scaled by coefficient).
+        total_value_loss = v_loss * vf_coef
 
-        value_grads = value_tape.gradient(total_value_loss, value_network.trainable_variables)
-        # ##>: Global gradient clipping for stability.
-        value_grads = _clip_gradients(value_grads, max_grad_norm)
-        value_optimizer.apply_gradients(zip(value_grads, value_network.trainable_variables))
+    value_grads = value_tape.gradient(total_value_loss, value_network.trainable_variables)
+    # ##>: Global gradient clipping for stability.
+    value_grads = _clip_gradients(value_grads, max_grad_norm)
+    value_optimizer.apply_gradients(zip(value_grads, value_network.trainable_variables))
 
-        # ##>: Calculate monitoring metrics.
-        # Clip fraction: how often the ratio was clipped.
-        ratio = tf.exp(current_action_probs - old_action_probs)
-        clip_fraction = tf.reduce_mean(tf.cast(tf.abs(ratio - 1.0) > clip_param, tf.float32))
+    # ##>: Calculate monitoring metrics.
+    # Clip fraction: how often the ratio was clipped.
+    ratio = tf.exp(current_action_probs - old_action_probs)
+    clip_fraction = tf.reduce_mean(tf.cast(tf.abs(ratio - 1.0) > clip_param, tf.float32))
 
-        # ##>: Approximate KL divergence for early stopping (if implemented).
-        approx_kl = tf.reduce_mean(old_action_probs - current_action_probs)
+    # ##>: Approximate KL divergence for early stopping (if implemented).
+    approx_kl = tf.reduce_mean(old_action_probs - current_action_probs)
 
     return pi_loss, v_loss, ent_bonus, clip_fraction, approx_kl
