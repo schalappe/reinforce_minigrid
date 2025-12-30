@@ -1,22 +1,27 @@
 """
 Experience replay buffer for PPO, optimized for vectorized environments.
 
-Stores trajectories from multiple parallel environments and calculates advantages and
-returns using Generalized Advantage Estimation (GAE).
+Stores trajectories from multiple parallel environments and calculates advantages and returns using
+Generalized Advantage Estimation (GAE).
 """
+
+from typing import Any
 
 import numpy as np
 import tensorflow as tf
 from loguru import logger
 
+from reinforce.core.base_buffer import BaseBuffer
 
-class Buffer:
+
+class Buffer(BaseBuffer):
     """
     A buffer for storing trajectories from parallel environments and calculating GAE.
 
-    This buffer uses pre-allocated NumPy arrays for efficiency when working with vectorized environments
-    It collects experiences (states, actions, rewards, etc.) from `num_envs` environments over
-    `steps_per_env` steps and computes the Generalized Advantage Estimation (GAE) and returns for PPO training.
+    This buffer uses pre-allocated NumPy arrays for efficiency when working with vectorized
+    environments. It collects experiences (states, actions, rewards, etc.) from `num_envs`
+    environments over `steps_per_env` steps and computes the Generalized Advantage Estimation (GAE)
+    and returns for PPO training.
     """
 
     def __init__(self, obs_shape: tuple, num_envs: int, steps_per_env: int, gamma: float = 0.99, lam: float = 0.95):
@@ -36,14 +41,14 @@ class Buffer:
         lam : float, optional
             GAE lambda parameter. Default is 0.95.
         """
-        self.obs_shape = obs_shape
+        capacity = num_envs * steps_per_env
+        super().__init__(obs_shape, capacity)
+
         self.num_envs = num_envs
         self.steps_per_env = steps_per_env
         self.gamma = gamma
         self.lam = lam
-
-        # ##: Calculate total buffer size.
-        self.buffer_size = self.num_envs * self.steps_per_env
+        self.buffer_size = capacity
 
         # ##: Pre-allocate NumPy arrays for efficiency.
         self.states = np.zeros((self.steps_per_env, self.num_envs) + self.obs_shape, dtype=np.float32)
@@ -212,7 +217,30 @@ class Buffer:
 
         return dataset
 
-    def clear(self):
+    def clear(self) -> None:
         """Resets the buffer pointer and trajectory ready flag."""
         self.ptr = 0
         self.trajectory_ready = False
+
+    def sample(self, batch_size: int) -> tuple[Any, ...]:
+        """
+        Sample a batch from the buffer.
+
+        For PPO, use get_batches() instead since PPO uses all data with shuffling.
+        This method is provided for interface compatibility.
+
+        Parameters
+        ----------
+        batch_size : int
+            Not used in PPO buffer.
+
+        Returns
+        -------
+        tuple
+            Flattened buffer contents.
+        """
+        return self._flatten_buffer()
+
+    def __len__(self) -> int:
+        """Return current number of stored transitions."""
+        return self.ptr * self.num_envs

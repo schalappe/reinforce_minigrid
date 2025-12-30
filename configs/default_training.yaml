@@ -1,4 +1,8 @@
-# Default configuration for PPO training on MiniGrid Maze
+# Default configuration for RL training on MiniGrid Maze
+# Supports both PPO and Rainbow DQN algorithms
+
+# Algorithm selection: "ppo" or "dqn"
+algorithm: ppo
 
 environment:
   seed: 42
@@ -8,43 +12,68 @@ training:
   steps_per_update: 128 # Smaller rollouts work better with more envs
   num_envs: 8 # More parallel environments for better sample efficiency
 
+# PPO (Proximal Policy Optimization) hyperparameters
 ppo:
-  learning_rate: 2.5e-4 # Standard PPO learning rate
+  learning_rate: 2.5e-4
   gamma: 0.99
   lambda: 0.95
   clip_param: 0.2
   entropy_coef: 0.01
   vf_coef: 0.5
-  epochs: 4 # Fewer epochs with smaller rollouts
-  batch_size: 256 # Larger batches for stable gradients
-  max_grad_norm: 0.5 # Global gradient clipping
-  use_lr_annealing: true # Linear decay to 0
-  use_value_clipping: false # Can hurt performance per ablations
+  epochs: 4
+  batch_size: 256
+  max_grad_norm: 0.5
+  use_lr_annealing: true
+  use_value_clipping: false
 
-# Random Network Distillation for intrinsic motivation
+# Rainbow DQN hyperparameters
+dqn:
+  learning_rate: 6.25e-5
+  gamma: 0.99
+  # Multi-step learning
+  n_step: 3
+  # Categorical DQN (C51) parameters
+  num_atoms: 51
+  v_min: -10.0
+  v_max: 10.0
+  # Replay buffer parameters
+  buffer_size: 100000
+  batch_size: 32
+  # Training schedule
+  target_update_freq: 8000
+  learning_starts: 20000
+  train_freq: 4
+  # Prioritized Experience Replay
+  priority_alpha: 0.6
+  priority_beta_start: 0.4
+  priority_beta_frames: 100000
+  # Rainbow component toggles
+  use_noisy: true
+  use_dueling: true
+  use_double: true
+  use_per: true
+  use_multistep: true
+  use_categorical: true
+
+# Random Network Distillation for intrinsic motivation (PPO only)
 rnd:
   enabled: true
   feature_dim: 512
   learning_rate: 1e-4
   intrinsic_reward_scale: 1.0
   update_proportion: 0.25
-  intrinsic_reward_coef: 0.5 # Blend: r_total = r_ext + coef * r_int
+  intrinsic_reward_coef: 0.5
 
-# Hybrid exploration strategies
+# Hybrid exploration strategies (PPO only)
 exploration:
-  # ε-greedy: Random action with decaying probability
   use_epsilon_greedy: true
   epsilon_start: 0.3
   epsilon_end: 0.01
   epsilon_decay_steps: 500000
-
-  # UCB: Exploration bonus for infrequent actions
   use_ucb: true
   ucb_coefficient: 0.5
-
-  # Adaptive entropy: Auto-tune entropy coefficient
   use_adaptive_entropy: true
-  target_entropy_ratio: 0.5 # Target as fraction of max entropy
+  target_entropy_ratio: 0.5
   entropy_lr: 0.01
   min_entropy_coef: 0.001
   max_entropy_coef: 0.1

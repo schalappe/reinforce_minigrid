@@ -6,59 +6,21 @@ and proper gradient clipping.
 """
 
 from pathlib import Path
+from typing import Any
 
 import gymnasium as gym
 import numpy as np
 import tensorflow as tf
 from loguru import logger
 
-from reinforce import setup_logger
-from reinforce.buffer import Buffer
-from reinforce.network import build_actor_critic_networks
-from reinforce.ppo import get_action_distribution, train_step
-
-setup_logger()
-
-
-class LearningRateScheduler:
-    """Linear learning rate scheduler that decays from initial to final value."""
-
-    def __init__(self, initial_lr: float, total_timesteps: int, final_lr: float = 0.0):
-        """
-        Initialize learning rate scheduler.
-
-        Parameters
-        ----------
-        initial_lr : float
-            Initial learning rate.
-        total_timesteps : int
-            Total training timesteps for decay calculation.
-        final_lr : float, optional
-            Final learning rate at end of training. Default is 0.0.
-        """
-        self.initial_lr = initial_lr
-        self.final_lr = final_lr
-        self.total_timesteps = total_timesteps
-
-    def get_lr(self, current_timestep: int) -> float:
-        """
-        Calculate current learning rate based on progress.
-
-        Parameters
-        ----------
-        current_timestep : int
-            Current training timestep.
-
-        Returns
-        -------
-        float
-            Current learning rate after linear decay.
-        """
-        progress = min(1.0, current_timestep / self.total_timesteps)
-        return self.initial_lr + progress * (self.final_lr - self.initial_lr)
+from reinforce.core.base_agent import BaseAgent
+from reinforce.core.schedules import LinearSchedule
+from reinforce.ppo.buffer import Buffer
+from reinforce.ppo.network import build_actor_critic_networks
+from reinforce.ppo.ppo import get_action_distribution, train_step
 
 
-class PPOAgent:
+class PPOAgent(BaseAgent):
     """
     Proximal Policy Optimization (PPO) Agent.
 
@@ -89,9 +51,7 @@ class PPOAgent:
         use_value_clipping: bool = False,
     ):
         """
-        Initializes the PPO Agent.
-
-        Sets up networks, optimizers, and hyperparameters.
+        Initialize the PPO Agent.
 
         Parameters
         ----------
@@ -100,33 +60,27 @@ class PPOAgent:
         action_space : gym.Space
             The action space of the environment. Must be Discrete.
         learning_rate : float, optional
-            Initial learning rate for the policy and value network optimizers.
-            Default is 3e-4.
+            Initial learning rate. Default is 3e-4.
         gamma : float, optional
-            Discount factor for reward calculation. Default is 0.99.
+            Discount factor. Default is 0.99.
         lam : float, optional
-            Lambda parameter for Generalized Advantage Estimation (GAE).
-            Default is 0.95.
+            GAE lambda parameter. Default is 0.95.
         clip_param : float, optional
-            Clipping parameter (epsilon) for the PPO objective function.
-            Default is 0.2.
+            PPO clipping parameter. Default is 0.2.
         entropy_coef : float, optional
-            Coefficient for the entropy bonus term in the loss, encouraging
-            exploration. Default is 0.01.
+            Entropy bonus coefficient. Default is 0.01.
         vf_coef : float, optional
-            Coefficient for the value function loss term in the total loss.
-            Default is 0.5.
+            Value function loss coefficient. Default is 0.5.
         epochs : int, optional
-            Number of training epochs to run on the collected batch of
-            experiences. Default is 4.
+            PPO epochs per update. Default is 4.
         batch_size : int, optional
-            Size of the mini-batches used during training epochs. Default is 64.
+            Mini-batch size. Default is 64.
         num_envs : int, optional
-            Number of parallel environments being used. Default is 1.
+            Number of parallel environments. Default is 1.
         steps_per_update : int, optional
-            Number of steps collected per environment before an update. Default is 2048.
+            Steps per environment per update. Default is 2048.
         max_grad_norm : float, optional
-            Maximum gradient norm for clipping. Default is 0.5.
+            Maximum gradient norm. Default is 0.5.
         total_timesteps : int, optional
             Total training timesteps for LR scheduling. Default is 1_000_000.
         use_lr_annealing : bool, optional
@@ -134,14 +88,12 @@ class PPOAgent:
         use_value_clipping : bool, optional
             Whether to use value function clipping. Default is False.
         """
-        if observation_space.shape is None:
-            raise ValueError("Observation space must have a defined shape.")
-        self.obs_shape: tuple[int, ...] = observation_space.shape
-        self.input_shape: tuple[int, ...] = observation_space.shape
+        super().__init__(observation_space, action_space)
 
         if not isinstance(action_space, gym.spaces.Discrete):
             raise ValueError("PPOAgent currently only supports Discrete action spaces.")
         self.num_actions: int = int(action_space.n)
+        self.input_shape: tuple[int, ...] = self.obs_shape
 
         # ##>: Store hyperparameters.
         self.gamma = gamma
@@ -164,10 +116,10 @@ class PPOAgent:
         self.value_optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate, epsilon=1e-5)
 
         # ##>: Learning rate scheduler.
-        self.lr_scheduler = LearningRateScheduler(learning_rate, total_timesteps) if use_lr_annealing else None
+        self.lr_scheduler = LinearSchedule(learning_rate, 0.0, total_timesteps) if use_lr_annealing else None
         self.current_timestep = 0
 
-        # ##>: Initialize buffer with size information.
+        # ##>: Initialize buffer.
         self.buffer = Buffer(
             obs_shape=self.obs_shape,
             num_envs=num_envs,
@@ -177,68 +129,41 @@ class PPOAgent:
         )
 
     def _preprocess_state(self, state: np.ndarray) -> tf.Tensor:
-        """
-        Preprocesses the environment state(s) for network input.
-
-        Converts state(s) to a TensorFlow tensor. Assumes input might already have a batch dimension.
-
-        Parameters
-        ----------
-        state : np.ndarray
-            The environment observation.
-
-        Returns
-        -------
-        tf.Tensor
-            The processed state tensor ready for network input.
-        """
+        """Preprocess state for network input."""
         return tf.convert_to_tensor(state, dtype=tf.float32)
 
     def _update_learning_rate(self) -> None:
-        """Updates optimizer learning rates based on scheduler."""
+        """Update optimizer learning rates based on scheduler."""
         if self.lr_scheduler is not None:
-            new_lr = self.lr_scheduler.get_lr(self.current_timestep)
+            new_lr = self.lr_scheduler.value(self.current_timestep)
             self.policy_optimizer.learning_rate.assign(new_lr)
             self.value_optimizer.learning_rate.assign(new_lr)
 
-    def get_action(self, state: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def get_action(self, state: np.ndarray, training: bool = True) -> tuple[np.ndarray, dict[str, Any]]:
         """
-        Selects actions based on the current policy and a batch of states.
-
-        Uses the policy network to sample actions from the distribution for the
-        given states and the value network to estimate the states' values.
+        Select actions based on the current policy.
 
         Parameters
         ----------
         state : np.ndarray
-            The current environment observation.
+            Current observation(s).
+        training : bool, optional
+            Whether in training mode. Default is True.
 
         Returns
         -------
-        actions : np.ndarray
-            The batch of actions selected by the policy.
-        values : np.ndarray
-            The batch of value estimates for the states from the critic.
-        action_log_probs : np.ndarray
-            The batch of log probabilities of the selected actions under the current policy.
+        tuple[np.ndarray, dict[str, Any]]
+            Tuple of (actions, info_dict) where info_dict contains 'values' and 'log_probs'.
         """
         processed_state = self._preprocess_state(state)
 
-        # ##>: Get action distribution logits from policy network.
         action_logits = self.policy_network(processed_state, training=False)
         dist = get_action_distribution(action_logits)
-
-        # ##>: Sample an action from the distribution.
         action = dist.sample()
-
-        # ##>: Get log probability of the sampled action.
         action_prob = dist.log_prob(action)
-
-        # ##>: Get value estimate from value network.
         values = self.value_network(processed_state, training=False)
 
-        # ##>: Return numpy arrays for interaction with gym envs.
-        return action.numpy(), tf.squeeze(values).numpy(), action_prob.numpy()
+        return action.numpy(), {"values": tf.squeeze(values).numpy(), "log_probs": action_prob.numpy()}
 
     def store_transition(
         self,
@@ -250,56 +175,48 @@ class PPOAgent:
         action_log_prob: np.ndarray,
     ) -> None:
         """
-        Stores a batch of transitions in the experience buffer.
+        Store a batch of transitions in the experience buffer.
 
         Parameters
         ----------
         state : np.ndarray
-            Batch of states observed. Shape: (num_envs, *obs_shape)
+            Batch of states. Shape: (num_envs, *obs_shape)
         action : np.ndarray
-            Batch of actions taken. Shape: (num_envs,)
+            Batch of actions. Shape: (num_envs,)
         reward : np.ndarray
-            Batch of rewards received. Shape: (num_envs,)
+            Batch of rewards. Shape: (num_envs,)
         value : np.ndarray
-            Batch of value estimates of the states. Shape: (num_envs,)
+            Batch of value estimates. Shape: (num_envs,)
         done : np.ndarray
             Batch of done flags. Shape: (num_envs,)
         action_log_prob : np.ndarray
-            Batch of log probabilities of the actions taken. Shape: (num_envs,)
+            Batch of action log probabilities. Shape: (num_envs,)
         """
         self.buffer.store(state, action, reward, value, done, action_log_prob)
 
-    def learn(self, last_state: np.ndarray | None = None, steps_collected: int = 0) -> dict:
+    def learn(self, last_state: np.ndarray | None = None, steps_collected: int = 0, **kwargs: Any) -> dict[str, float]:
         """
-        Performs the PPO learning update step using collected batch experiences.
-
-        Computes advantages and returns for the collected trajectory, then updates the policy
-        and value networks using mini-batch gradient descent over multiple epochs based on
-        the PPO objective. Clears the buffer afterwards.
+        Perform the PPO learning update.
 
         Parameters
         ----------
         last_state : np.ndarray, optional
-            The batch of final states observed after the last step of the trajectory
-            from each parallel environment. Shape: (num_envs, *obs_shape) or None.
-            Default is None.
+            Final states for bootstrapping. Shape: (num_envs, *obs_shape).
         steps_collected : int, optional
-            Number of steps collected this update, for LR scheduling. Default is 0.
+            Number of steps collected for LR scheduling.
 
         Returns
         -------
-        dict
-            Training metrics including policy_loss, value_loss, entropy, clip_fraction, approx_kl.
+        dict[str, float]
+            Training metrics.
         """
-        # ##>: Update timestep counter for LR scheduling.
         self.current_timestep += steps_collected
         self._update_learning_rate()
 
-        # ##>: Estimate the value of the last states for GAE calculation.
+        # ##>: Estimate value of last states for GAE.
         last_values = np.zeros(self.buffer.num_envs)
         if last_state is not None:
             current_last_state: np.ndarray = last_state
-            # ##>: Ensure last_state has the correct shape (num_envs, *obs_shape).
             if len(current_last_state.shape) == len(self.obs_shape):
                 current_last_state = np.expand_dims(current_last_state, 0)
             elif current_last_state.shape[0] != self.buffer.num_envs:
@@ -320,16 +237,17 @@ class PPOAgent:
                 if self.buffer.num_envs == 1 and last_values.ndim == 0:
                     last_values = np.expand_dims(last_values, 0)
 
-        # ##>: Compute advantages and returns using the batch of last values.
         self.buffer.compute_advantages_and_returns(last_values)
-
-        # ##>: Get batched data.
         dataset = self.buffer.get_batches(self.batch_size)
 
-        # ##>: Track metrics for monitoring.
-        metrics = {"policy_loss": [], "value_loss": [], "entropy": [], "clip_fraction": [], "approx_kl": []}
+        metrics: dict[str, list[float]] = {
+            "policy_loss": [],
+            "value_loss": [],
+            "entropy": [],
+            "clip_fraction": [],
+            "approx_kl": [],
+        }
 
-        # ##>: Perform optimization over multiple epochs.
         for _ in range(self.epochs):
             for batch in dataset:
                 states, actions, old_action_probs, returns, advantages = batch
@@ -347,7 +265,7 @@ class PPOAgent:
                     self.vf_coef,
                     self.entropy_coef,
                     self.max_grad_norm,
-                    old_values=None,  # ##~: Would need buffer changes for value clipping.
+                    old_values=None,
                     use_value_clipping=self.use_value_clipping,
                 )
 
@@ -357,22 +275,11 @@ class PPOAgent:
                 metrics["clip_fraction"].append(float(clip_frac.numpy()))
                 metrics["approx_kl"].append(float(approx_kl.numpy()))
 
-        # ##>: Clear the buffer for the next trajectory collection phase.
         self.buffer.clear()
-
-        # ##>: Return averaged metrics.
-        return {key: np.mean(values) for key, values in metrics.items()}
+        return {key: float(np.mean(values)) for key, values in metrics.items()}
 
     def save_models(self, path_prefix: str) -> None:
-        """
-        Saves the policy and value networks to files using the .keras format.
-
-        Parameters
-        ----------
-        path_prefix : str
-            The prefix for the filenames. Models will be saved to
-            `{path_prefix}_policy.keras` and `{path_prefix}_value.keras`.
-        """
+        """Save policy and value networks."""
         policy_path = f"{path_prefix}_policy.keras"
         value_path = f"{path_prefix}_value.keras"
         self.policy_network.save(policy_path)
@@ -380,20 +287,7 @@ class PPOAgent:
         logger.info(f"Models saved to {policy_path} and {value_path}")
 
     def load_models(self, path_prefix: str) -> None:
-        """
-        Loads the policy and value networks from .keras files.
-
-        Parameters
-        ----------
-        path_prefix : str
-            The prefix for the filenames. Models will be loaded from
-            `{path_prefix}_policy.keras` and `{path_prefix}_value.keras`.
-
-        Raises
-        ------
-        Exception
-            Catches and prints exceptions during file loading (e.g., file not found).
-        """
+        """Load policy and value networks."""
         policy_path = Path(f"{path_prefix}_policy.keras")
         value_path = Path(f"{path_prefix}_value.keras")
         try:
@@ -404,12 +298,5 @@ class PPOAgent:
             logger.warning(f"Error loading models from {policy_path} and {value_path}: {exc}.")
 
     def get_current_lr(self) -> float:
-        """
-        Returns the current learning rate.
-
-        Returns
-        -------
-        float
-            Current learning rate of the policy optimizer.
-        """
+        """Return current learning rate."""
         return float(self.policy_optimizer.learning_rate.numpy())

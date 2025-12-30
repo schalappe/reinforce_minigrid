@@ -2,7 +2,7 @@
 Configuration Management for REINFORCE Training.
 
 This package handles the loading and management of configuration settings for
-the REINFORCE agent training process.
+the reinforcement learning agent training process.
 
 Modules
 -------
@@ -11,8 +11,3 @@ config_loader
 training_config
     Defines the data structures for training configurations.
 """
-
-from .config_loader import load_config
-from .training_config import MainConfig
-
-__all__ = ["load_config", "MainConfig"]

@@ -13,17 +13,14 @@ Reference: Burda et al., "Exploration by Random Network Distillation" (2018)
 
 import numpy as np
 import tensorflow as tf
-from keras import Model, initializers, layers
+from keras import Model, layers
 
-
-def _get_orthogonal_initializer(scale: float = 1.0) -> initializers.Orthogonal:
-    """Creates orthogonal initializer with specified gain."""
-    return initializers.Orthogonal(gain=scale)
+from reinforce.core.network_utils import get_orthogonal_initializer
 
 
 def build_rnd_networks(input_shape: tuple, feature_dim: int = 512) -> tuple[Model, Model]:
     """
-    Builds the RND target and predictor networks.
+    Build the RND target and predictor networks.
 
     Both networks map observations to fixed-size feature vectors.
     The target network is frozen; the predictor learns to match its outputs.
@@ -52,7 +49,7 @@ def build_rnd_networks(input_shape: tuple, feature_dim: int = 512) -> tuple[Mode
             strides=4,
             padding="same",
             activation="leaky_relu",
-            kernel_initializer=_get_orthogonal_initializer(scale=2**0.5),
+            kernel_initializer=get_orthogonal_initializer(scale=2**0.5),
             name=f"{name_prefix}_conv1",
         )(x)
 
@@ -62,7 +59,7 @@ def build_rnd_networks(input_shape: tuple, feature_dim: int = 512) -> tuple[Mode
             strides=2,
             padding="same",
             activation="leaky_relu",
-            kernel_initializer=_get_orthogonal_initializer(scale=2**0.5),
+            kernel_initializer=get_orthogonal_initializer(scale=2**0.5),
             name=f"{name_prefix}_conv2",
         )(x)
 
@@ -72,7 +69,7 @@ def build_rnd_networks(input_shape: tuple, feature_dim: int = 512) -> tuple[Mode
             strides=1,
             padding="same",
             activation="leaky_relu",
-            kernel_initializer=_get_orthogonal_initializer(scale=2**0.5),
+            kernel_initializer=get_orthogonal_initializer(scale=2**0.5),
             name=f"{name_prefix}_conv3",
         )(x)
 
@@ -83,7 +80,7 @@ def build_rnd_networks(input_shape: tuple, feature_dim: int = 512) -> tuple[Mode
     target_features = build_cnn_base(target_inputs, "target")
     target_output = layers.Dense(
         feature_dim,
-        kernel_initializer=_get_orthogonal_initializer(scale=2**0.5),
+        kernel_initializer=get_orthogonal_initializer(scale=2**0.5),
         name="target_features",
     )(target_features)
     target_network = Model(inputs=target_inputs, outputs=target_output, name="RNDTarget")
@@ -94,12 +91,12 @@ def build_rnd_networks(input_shape: tuple, feature_dim: int = 512) -> tuple[Mode
     x = layers.Dense(
         feature_dim,
         activation="relu",
-        kernel_initializer=_get_orthogonal_initializer(scale=2**0.5),
+        kernel_initializer=get_orthogonal_initializer(scale=2**0.5),
         name="predictor_hidden",
     )(predictor_features)
     predictor_output = layers.Dense(
         feature_dim,
-        kernel_initializer=_get_orthogonal_initializer(scale=1.0),
+        kernel_initializer=get_orthogonal_initializer(scale=1.0),
         name="predictor_output",
     )(x)
     predictor_network = Model(inputs=predictor_inputs, outputs=predictor_output, name="RNDPredictor")
@@ -152,7 +149,6 @@ class RNDModule:
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate, epsilon=1e-5)
 
         # ##>: Running statistics for reward normalization (Welford's algorithm).
-        # Store M2 (sum of squared deviations) for numerical stability.
         self.reward_mean = 0.0
         self.reward_m2 = 0.0
         self.reward_count = 1e-4
@@ -188,32 +184,21 @@ class RNDModule:
         return normalized_reward * self.intrinsic_reward_scale
 
     def _update_reward_stats(self, rewards: np.ndarray) -> None:
-        """
-        Update running mean and variance using parallel Welford's algorithm.
-
-        Uses the correct M2 (sum of squared deviations) formulation for numerical stability.
-        """
+        """Update running mean and variance using parallel Welford's algorithm."""
         batch_mean = np.mean(rewards)
         batch_var = np.var(rewards)
         batch_count = len(rewards)
 
-        # ##>: Parallel update formula for combining batch statistics.
         delta = batch_mean - self.reward_mean
         total_count = self.reward_count + batch_count
 
-        # ##>: Update mean using weighted average.
         self.reward_mean += delta * batch_count / total_count
-
-        # ##>: Update M2 using parallel algorithm formula.
-        # M2_batch = var * count (sum of squared deviations for batch).
         batch_m2 = batch_var * batch_count
-        # Combined M2 = M2_a + M2_b + delta^2 * n_a * n_b / (n_a + n_b).
         self.reward_m2 += batch_m2 + delta**2 * self.reward_count * batch_count / total_count
         self.reward_count = total_count
 
     def _normalize_reward(self, rewards: np.ndarray) -> np.ndarray:
         """Normalize rewards using running statistics."""
-        # ##>: Variance = M2 / count.
         variance = self.reward_m2 / self.reward_count if self.reward_count > 0 else 1.0
         return (rewards - self.reward_mean) / (np.sqrt(variance) + 1e-8)
 
@@ -242,11 +227,8 @@ class RNDModule:
         with tf.GradientTape() as tape:
             target_features = self.target_network(obs_tensor, training=False)
             predictor_features = self.predictor_network(obs_tensor, training=True)
-
-            # ##>: MSE loss between predictor and target.
             loss = tf.reduce_mean(tf.square(target_features - predictor_features))
 
-        # ##>: Update predictor network.
         gradients = tape.gradient(loss, self.predictor_network.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.predictor_network.trainable_variables))
 

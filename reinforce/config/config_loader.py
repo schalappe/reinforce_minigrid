@@ -26,6 +26,11 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 def _apply_cli_overrides(config_dict: dict[str, Any], args: argparse.Namespace) -> None:
     """Apply CLI argument overrides to the config dictionary in-place."""
+    # ##>: Algorithm selection.
+    if getattr(args, "algorithm", None) is not None:
+        config_dict["algorithm"] = args.algorithm
+        logger.debug(f"CLI override: algorithm = {args.algorithm}")
+
     # ##>: Maps CLI arg name -> (section, config_key).
     arg_mapping = {
         "total_timesteps": ("training", "total_timesteps"),
@@ -47,6 +52,20 @@ def _apply_cli_overrides(config_dict: dict[str, Any], args: argparse.Namespace) 
         "load_path": ("logging", "load_path"),
     }
 
+    # ##>: DQN-specific argument mappings.
+    dqn_arg_mapping = {
+        "dqn_lr": ("dqn", "learning_rate"),
+        "dqn_gamma": ("dqn", "gamma"),
+        "n_step": ("dqn", "n_step"),
+        "num_atoms": ("dqn", "num_atoms"),
+        "buffer_size": ("dqn", "buffer_size"),
+        "dqn_batch_size": ("dqn", "batch_size"),
+        "target_update_freq": ("dqn", "target_update_freq"),
+        "learning_starts": ("dqn", "learning_starts"),
+        "train_freq": ("dqn", "train_freq"),
+    }
+    arg_mapping.update(dqn_arg_mapping)
+
     for arg_name, (section, key) in arg_mapping.items():
         value = getattr(args, arg_name, None)
         if value is not None:
@@ -60,6 +79,14 @@ def _apply_cli_overrides(config_dict: dict[str, Any], args: argparse.Namespace) 
     if getattr(args, "use_value_clipping", False):
         config_dict.setdefault("ppo", {})["use_value_clipping"] = True
         logger.debug("CLI override: ppo.use_value_clipping = True")
+
+    # ##>: DQN component toggles.
+    dqn_toggles = ["no_noisy", "no_dueling", "no_double", "no_per", "no_multistep", "no_categorical"]
+    for toggle in dqn_toggles:
+        if getattr(args, toggle, False):
+            key = toggle.replace("no_", "use_")
+            config_dict.setdefault("dqn", {})[key] = False
+            logger.debug(f"CLI override: dqn.{key} = False")
 
 
 def load_config(

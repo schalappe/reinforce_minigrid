@@ -1,5 +1,7 @@
 """
-Script to evaluate a trained PPO agent in the MiniGrid Maze environment and save the rendering as a GIF.
+Script to evaluate trained RL agents in the MiniGrid Maze environment and save the rendering as a GIF.
+
+Supports both PPO and Rainbow DQN agents.
 """
 
 import os
@@ -15,7 +17,6 @@ from minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 
 from maze.envs import BaseMaze, EasyMaze, HardMaze, MediumMaze
 from reinforce import setup_logger
-from reinforce.agent import PPOAgent
 
 ENVS: dict[str, Callable] = {
     "base": BaseMaze,
@@ -31,7 +32,7 @@ ENVS: dict[str, Callable] = {
     "model_path_prefix",
     type=click.Path(exists=False),
     default="./models/ppo_maze_final",
-    help="Path prefix for loading the policy and value models.",
+    help="Path prefix for loading the models.",
     show_default=True,
 )
 @click.option(
@@ -45,7 +46,7 @@ ENVS: dict[str, Callable] = {
 @click.option(
     "--seed",
     type=int,
-    default=random.randint(0, 1_000_000),
+    default=None,
     help="Random seed for environment and agent.",
     show_default="random",
 )
@@ -63,41 +64,68 @@ ENVS: dict[str, Callable] = {
     help="Difficulty level of the maze.",
     show_default=True,
 )
-def evaluate_and_render(model_path_prefix: str, output_gif_path: str, seed: int, max_steps: int, level: str):
+@click.option(
+    "--algorithm",
+    type=click.Choice(["ppo", "dqn"]),
+    default="ppo",
+    help="Algorithm type of the saved model.",
+    show_default=True,
+)
+def evaluate_and_render(
+    model_path_prefix: str, output_gif_path: str, seed: int | None, max_steps: int, level: str, algorithm: str
+):
     """
-    Loads a PPO agent, runs it in the Maze environment, and saves a GIF.
+    Load an RL agent, run it in the Maze environment, and save a GIF.
 
     Parameters
     ----------
     model_path_prefix : str
-        Path prefix for loading the policy and value models (e.g., 'models/ppo_maze_final').
+        Path prefix for loading the models.
     output_gif_path : str
         Path where the output GIF file will be saved.
     seed : int, optional
         Random seed for reproducibility.
-    max_steps : int, optional
-        Maximum number of steps per episode evaluation.
+    max_steps : int
+        Maximum number of steps per episode.
+    level : str
+        Maze difficulty level.
+    algorithm : str
+        Algorithm type ('ppo' or 'dqn').
     """
     setup_logger()
+
+    if seed is None:
+        seed = random.randint(0, 1_000_000)
+
     logger.info(f"Starting evaluation with model prefix: {model_path_prefix}")
+    logger.info(f"Algorithm: {algorithm.upper()}")
     logger.info(f"Output GIF will be saved to: {output_gif_path}")
     logger.info(f"Using seed: {seed}, Max steps: {max_steps}")
 
-    # ##: Seeding for reproducibility.
+    # ##>: Seeding for reproducibility.
     np.random.seed(seed)
     tf.random.set_seed(seed)
     random.seed(seed)
 
-    # ##>: Create environment with RGB pixel observations for CNN compatibility.
+    # ##>: Create environment with RGB pixel observations.
     env = ENVS[level](render_mode="rgb_array")
     env = RGBImgPartialObsWrapper(env)
     env = ImgObsWrapper(env)
-    logger.info("Successfully created environment.")
+    logger.info("Environment created successfully.")
 
-    # ##: Initialize agent.
-    agent = PPOAgent(env.observation_space, env.action_space)
+    # ##>: Initialize agent based on algorithm type.
+    if algorithm == "ppo":
+        from reinforce.ppo.agent import PPOAgent
 
-    # ##: Load pre-trained models.
+        agent = PPOAgent(env.observation_space, env.action_space)
+    elif algorithm == "dqn":
+        from reinforce.dqn.agent import RainbowAgent
+
+        agent = RainbowAgent(env.observation_space, env.action_space)
+    else:
+        raise ValueError(f"Unknown algorithm: {algorithm}")
+
+    # ##>: Load pre-trained models.
     logger.info(f"Loading models from prefix: {model_path_prefix}")
     try:
         agent.load_models(model_path_prefix)
@@ -107,43 +135,43 @@ def evaluate_and_render(model_path_prefix: str, output_gif_path: str, seed: int,
         env.close()
         return
 
-    # ##: Run evaluation loop and collect frames.
+    # ##>: Run evaluation loop and collect frames.
     frames = []
-    current_obs_dict, _ = env.reset(seed=seed)
-    current_obs = current_obs_dict
+    current_obs, _ = env.reset(seed=seed)
     logger.info("Starting episode evaluation...")
 
+    total_reward = 0.0
     for step in range(max_steps):
-        # ##: Render the environment.
         frame = env.render()
         frames.append(frame)
 
-        # ##: Get action from the agent (only need action, ignore value/prob).
-        # Add batch dimension for the agent's network
+        # ##>: Get action from the agent (add batch dimension).
         current_obs_batched = np.expand_dims(current_obs, axis=0)
-        action, _, _ = agent.get_action(current_obs_batched)
+        actions, _ = agent.get_action(current_obs_batched, training=False)
+        action = actions[0]
 
-        # ##: Step the environment.
-        next_obs_dict, _, terminated, truncated, _ = env.step(action)
-        next_obs = next_obs_dict
+        # ##>: Step the environment.
+        next_obs, reward, terminated, truncated, _ = env.step(action)
+        total_reward += reward
 
-        # ##: Update current state.
         current_obs = next_obs
 
-        # ##: Check if episode ended.
         if terminated or truncated:
-            logger.info(f"Episode finished after {step + 1} steps (Terminated: {terminated}, Truncated: {truncated}).")
+            logger.info(
+                f"Episode finished after {step + 1} steps. "
+                f"Total reward: {total_reward:.2f} "
+                f"(Terminated: {terminated}, Truncated: {truncated})"
+            )
             frame = env.render()
             frames.append(frame)
             break
-        else:
-            frame = env.render()
-            frames.append(frame)
+    else:
+        logger.info(f"Reached max steps ({max_steps}). Total reward: {total_reward:.2f}")
 
     env.close()
     logger.info("Environment closed.")
 
-    # ##: Save frames as GIF.
+    # ##>: Save frames as GIF.
     logger.info(f"Saving {len(frames)} frames to {output_gif_path}...")
     try:
         output_dir = os.path.dirname(output_gif_path)

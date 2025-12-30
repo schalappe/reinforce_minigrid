@@ -1,6 +1,15 @@
-"""Pydantic models for PPO training configuration."""
+"""Pydantic models for training configuration supporting multiple RL algorithms."""
+
+from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator
+
+
+class Algorithm(str, Enum):
+    """Supported RL algorithms."""
+
+    PPO = "ppo"
+    DQN = "dqn"
 
 
 class EnvironmentConfig(BaseModel):
@@ -41,6 +50,53 @@ class PPOConfig(BaseModel):
         return v
 
 
+class DQNConfig(BaseModel):
+    """Hyperparameters for the Rainbow DQN algorithm."""
+
+    learning_rate: float = 6.25e-5
+    gamma: float = 0.99
+    # ##>: Multi-step learning parameters.
+    n_step: int = 3
+    # ##>: Categorical DQN (C51) parameters.
+    num_atoms: int = 51
+    v_min: float = -10.0
+    v_max: float = 10.0
+    # ##>: Replay buffer parameters.
+    buffer_size: int = 100_000
+    batch_size: int = 32
+    # ##>: Training schedule parameters.
+    target_update_freq: int = 8_000
+    learning_starts: int = 20_000
+    train_freq: int = 4
+    # ##>: Prioritized Experience Replay parameters.
+    priority_alpha: float = 0.6
+    priority_beta_start: float = 0.4
+    priority_beta_frames: int = 100_000
+    # ##>: Rainbow component toggles.
+    use_noisy: bool = True
+    use_dueling: bool = True
+    use_double: bool = True
+    use_per: bool = True
+    use_multistep: bool = True
+    use_categorical: bool = True
+
+    model_config = {"populate_by_name": True}
+
+    @field_validator("learning_rate")
+    @classmethod
+    def lr_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("learning_rate must be positive")
+        return v
+
+    @field_validator("gamma")
+    @classmethod
+    def gamma_in_unit_interval(cls, v: float) -> float:
+        if not 0 < v <= 1:
+            raise ValueError("gamma must be in (0, 1]")
+        return v
+
+
 class RNDConfig(BaseModel):
     """Configuration for Random Network Distillation (intrinsic motivation)."""
 
@@ -49,14 +105,13 @@ class RNDConfig(BaseModel):
     learning_rate: float = 1e-4
     intrinsic_reward_scale: float = 1.0
     update_proportion: float = 0.25
-    # ##>: Coefficient for blending intrinsic + extrinsic rewards.
     intrinsic_reward_coef: float = 0.5
 
 
 class ExplorationConfig(BaseModel):
     """Configuration for hybrid exploration strategies."""
 
-    # ##>: ε-greedy parameters.
+    # ##>: Epsilon-greedy parameters.
     use_epsilon_greedy: bool = True
     epsilon_start: float = 0.3
     epsilon_end: float = 0.01
@@ -94,9 +149,11 @@ class LoggingConfig(BaseModel):
 class MainConfig(BaseModel):
     """Root configuration aggregating all sub-configurations."""
 
+    algorithm: Algorithm = Algorithm.PPO
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
     training: TrainingConfig = Field(default_factory=TrainingConfig)
     ppo: PPOConfig = Field(default_factory=PPOConfig)
+    dqn: DQNConfig = Field(default_factory=DQNConfig)
     rnd: RNDConfig = Field(default_factory=RNDConfig)
     exploration: ExplorationConfig = Field(default_factory=ExplorationConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)

@@ -21,6 +21,7 @@ dependencies = [
     "tensorflow-probability[tf]>=0.25.0",
     "click>=8.1.0",
     "pydantic-settings>=2.7.0",
+    "pyrefly>=0.46.1",
 ]
 
 [dependency-groups]
