@@ -67,6 +67,7 @@ class Maze(RoomGridLevel):
         self.doors_open = doors_open
         self.instrs: GoToInstr | None = None
         self.visited: dict[tuple[int, int], int] = {}
+        self.visited_rooms: set[tuple[int, int]] = set()
         self.distance: int | None = None
         self.goal_position: tuple[int, int] = (0, 0)
         self.current_room: tuple[int, int] | None = None
@@ -95,12 +96,38 @@ class Maze(RoomGridLevel):
 
         return (min(i, self.num_cols - 1), min(j, self.num_rows - 1))
 
+    @property
+    def maze_complexity(self) -> float:
+        """
+        Calculate a complexity factor based on maze configuration.
+
+        Returns a value between 0.0 and 1.0 where higher values indicate more
+        complex mazes (more rooms, closed doors, more distractors).
+
+        Returns
+        -------
+        float
+            Complexity factor in range [0.0, 1.0].
+        """
+        # ##>: Normalize room count (2x2=4 rooms → 0.0, 3x3=9 rooms → 1.0).
+        total_rooms = self.num_rows * self.num_cols
+        room_factor = min((total_rooms - 4) / 5, 1.0)
+
+        # ##>: Closed doors increase complexity.
+        door_factor = 0.0 if self.doors_open else 0.3
+
+        # ##>: Distractors add complexity.
+        distractor_factor = min(self.num_dists / 10, 0.3)
+
+        return min(room_factor + door_factor + distractor_factor, 1.0)
+
     def reward(self) -> float:
         """
         Calculate the reward based on the agent's current state.
 
-        The reward encourages moving towards the goal, exploring new cells,
-        and penalizes steps taken and wall collisions.
+        The reward encourages moving towards the goal, exploring new cells and rooms,
+        and penalizes steps taken and wall collisions. Exploration bonuses are weighted
+        by maze complexity to encourage more exploration in simpler mazes.
 
         Returns
         -------
@@ -112,13 +139,13 @@ class Maze(RoomGridLevel):
         Reward components:
         - Goal Reached: +10.0 if agent is at the goal position.
         - Progress Reward: +0.1 * (previous_distance - current_distance).
-          Positive if closer.
-        - Exploration Bonus: +0.05 if the agent enters a cell for the first time.
-        - Wall Collision Penalty: -0.5 if the agent's last action resulted in hitting a wall.
+        - Room Exploration Bonus: +0.2 if entering a new room (scaled by complexity).
+        - Cell Exploration Bonus: +0.05 if entering a new cell (scaled by complexity).
+        - Wall Collision Penalty: -0.5 if hitting a wall.
         - Step Penalty: -0.01 for each step taken.
         """
         # ##: Check for wall collision.
-        wall_collision_penalty = 0
+        wall_collision_penalty = 0.0
         if hasattr(self, "last_action_hit_wall") and self.last_action_hit_wall:
             wall_collision_penalty = -0.5
 
@@ -132,13 +159,30 @@ class Maze(RoomGridLevel):
         self.distance = distance
         progress_reward = (previous_distance - distance) * 0.1
 
-        # ##: Calculate exploration bonus.
-        exploration_bonus = 0
+        # ##>: Adaptive exploration weight: higher in simple mazes (encourages thorough search),
+        # ##>: lower in complex mazes (avoids over-rewarding exploration vs. goal-seeking).
+        exploration_weight = 1.5 - (0.7 * self.maze_complexity)
+
+        # ##: Room-level exploration bonus.
+        room_bonus = 0.0
+        current_room = self.get_room_coords(int(self.agent_pos[0]), int(self.agent_pos[1]))
+        if current_room not in self.visited_rooms:
+            room_bonus = 0.2
+            self.visited_rooms.add(current_room)
+        if current_room != self.current_room:
+            self.room_transitions += 1
+            self.current_room = current_room
+
+        # ##: Cell-level exploration bonus.
+        cell_bonus = 0.0
         agent_pos_key = (int(self.agent_pos[0]), int(self.agent_pos[1]))
         visit_count = self.visited.get(agent_pos_key, 0)
         if visit_count == 0:
-            exploration_bonus = 0.05
+            cell_bonus = 0.05
         self.visited[agent_pos_key] = visit_count + 1
+
+        # ##: Apply adaptive weighting to exploration bonuses.
+        exploration_bonus = (room_bonus + cell_bonus) * exploration_weight
 
         # ##: Standard step penalty.
         step_penalty = -0.01
@@ -224,3 +268,4 @@ class Maze(RoomGridLevel):
         self.goal_room = self.get_room_coords(self.goal_position[0], self.goal_position[1])
         self.room_transitions = 0
         self.visited = {}
+        self.visited_rooms = {self.current_room}
