@@ -18,7 +18,7 @@ import tensorflow as tf
 from gymnasium import Env
 from gymnasium.vector import AsyncVectorEnv
 from loguru import logger
-from minigrid.wrappers import ImgObsWrapper
+from minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 
 from maze.envs.base_maze import BaseMaze
 from maze.envs.easy_maze import EasyMaze
@@ -61,10 +61,19 @@ def create_env(env_class: type[Maze]) -> Callable[[], Env[Any, Any]]:
     -------
     Callable[[], Env]
         A factory function that creates and returns a wrapped environment.
+
+    Notes
+    -----
+    Uses RGBImgPartialObsWrapper to convert symbolic 7x7x3 encoded observations into 56x56x3 RGB pixel
+    arrays suitable for CNN processing, then ImgObsWrapper to remove the 'mission' text field, leaving
+    only the image tensor.
     """
 
     def make_env() -> Env[Any, Any]:
-        return ImgObsWrapper(env_class(render_mode="rgb_array"))
+        env = env_class(render_mode="rgb_array")
+        env = RGBImgPartialObsWrapper(env)
+        env = ImgObsWrapper(env)
+        return env
 
     return make_env
 

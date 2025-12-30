@@ -11,7 +11,7 @@ import imageio
 import numpy as np
 import tensorflow as tf
 from loguru import logger
-from minigrid.wrappers import ImgObsWrapper
+from minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 
 from maze.envs import BaseMaze, EasyMaze, HardMaze, MediumMaze
 from reinforce import setup_logger
@@ -88,8 +88,10 @@ def evaluate_and_render(model_path_prefix: str, output_gif_path: str, seed: int,
     tf.random.set_seed(seed)
     random.seed(seed)
 
-    # ##: Create environment with RGB array rendering.
-    env = ImgObsWrapper(ENVS[level](render_mode="rgb_array"))
+    # ##>: Create environment with RGB pixel observations for CNN compatibility.
+    env = ENVS[level](render_mode="rgb_array")
+    env = RGBImgPartialObsWrapper(env)
+    env = ImgObsWrapper(env)
     logger.info("Successfully created environment.")
 
     # ##: Initialize agent.
