@@ -1,8 +1,9 @@
 """
 Main training script for the PPO agent on the MiniGrid Maze environment.
 
-Implements curriculum learning with modern PPO enhancements including
-learning rate annealing, gradient clipping, and IMPALA-style networks.
+Implements curriculum learning with modern PPO enhancements including learning rate annealing,
+gradient clipping, IMPALA-style networks, RND (Random Network Distillation) for intrinsic motivation,
+and hybrid exploration strategies (ε-greedy + UCB + adaptive entropy).
 """
 
 import argparse
@@ -28,6 +29,8 @@ from maze.envs.medium_maze import MediumMaze
 from reinforce import setup_logger
 from reinforce.agent import PPOAgent
 from reinforce.config import MainConfig, load_config
+from reinforce.exploration import ExplorationManager
+from reinforce.rnd import RNDModule
 
 
 class CurriculumStage(TypedDict):
@@ -37,14 +40,22 @@ class CurriculumStage(TypedDict):
     env_class: type[Maze]
     threshold: float | None
     max_steps: int | None
+    entropy_multiplier: float
 
 
-# ##>: Define the curriculum with adjusted thresholds for IMPALA network.
+# ##>: Define the curriculum with per-stage entropy multipliers for harder exploration.
+# Higher multipliers encourage more exploration on harder stages.
 CURRICULUM: list[CurriculumStage] = [
-    {"name": "BaseMaze", "env_class": BaseMaze, "threshold": 0.5, "max_steps": 500_000},
-    {"name": "EasyMaze", "env_class": EasyMaze, "threshold": 1.0, "max_steps": 500_000},
-    {"name": "MediumMaze", "env_class": MediumMaze, "threshold": 2.0, "max_steps": 1_000_000},
-    {"name": "HardMaze", "env_class": HardMaze, "threshold": None, "max_steps": None},
+    {"name": "BaseMaze", "env_class": BaseMaze, "threshold": 0.5, "max_steps": 500_000, "entropy_multiplier": 1.0},
+    {"name": "EasyMaze", "env_class": EasyMaze, "threshold": 1.0, "max_steps": 500_000, "entropy_multiplier": 1.5},
+    {
+        "name": "MediumMaze",
+        "env_class": MediumMaze,
+        "threshold": 2.0,
+        "max_steps": 1_000_000,
+        "entropy_multiplier": 2.0,
+    },
+    {"name": "HardMaze", "env_class": HardMaze, "threshold": None, "max_steps": None, "entropy_multiplier": 3.0},
 ]
 
 
@@ -82,14 +93,16 @@ def train(config: MainConfig) -> None:
     """
     Trains the PPO agent based on the provided configuration using curriculum learning.
 
+    Includes RND for intrinsic motivation and hybrid exploration strategies.
+
     Parameters
     ----------
     config : MainConfig
         A dataclass object containing all necessary configuration parameters
-        (environment, training, PPO hyperparameters, logging).
+        (environment, training, PPO hyperparameters, exploration, logging).
     """
     setup_logger()
-    logger.info("Starting PPO training with modern enhancements and curriculum learning...")
+    logger.info("Starting PPO training with exploration enhancements and curriculum learning...")
     num_envs = config.training.num_envs
     logger.info(f"Number of parallel environments: {num_envs}")
     logger.info(f"Environment Seed: {config.environment.seed}")
@@ -105,6 +118,11 @@ def train(config: MainConfig) -> None:
     logger.info(
         f"Modern Enhancements: max_grad_norm={config.ppo.max_grad_norm}, "
         f"lr_annealing={config.ppo.use_lr_annealing}, value_clipping={config.ppo.use_value_clipping}"
+    )
+    logger.info(f"RND: enabled={config.rnd.enabled}, intrinsic_coef={config.rnd.intrinsic_reward_coef}")
+    logger.info(
+        f"Exploration: epsilon_greedy={config.exploration.use_epsilon_greedy}, "
+        f"ucb={config.exploration.use_ucb}, adaptive_entropy={config.exploration.use_adaptive_entropy}"
     )
     logger.info(
         f"Logging: Log Interval={config.logging.log_interval}, Save Interval={config.logging.save_interval}, "
@@ -155,6 +173,30 @@ def train(config: MainConfig) -> None:
         use_value_clipping=config.ppo.use_value_clipping,
     )
 
+    # ##>: Initialize RND module for intrinsic motivation.
+    rnd_module: RNDModule | None = None
+    if config.rnd.enabled:
+        obs_shape = env.single_observation_space.shape
+        if obs_shape is not None:
+            rnd_module = RNDModule(
+                input_shape=obs_shape,
+                feature_dim=config.rnd.feature_dim,
+                learning_rate=config.rnd.learning_rate,
+                intrinsic_reward_scale=config.rnd.intrinsic_reward_scale,
+                update_proportion=config.rnd.update_proportion,
+            )
+            logger.info("RND module initialized for intrinsic motivation.")
+
+    # ##>: Initialize exploration manager for hybrid exploration.
+    # Uses the Pydantic ExplorationConfig directly from the main config.
+    exploration_manager = ExplorationManager(
+        num_actions=agent.num_actions,
+        num_envs=num_envs,
+        config=config.exploration,
+        base_entropy_coef=config.ppo.entropy_coef,
+    )
+    logger.info("Exploration manager initialized with hybrid strategies.")
+
     # ##>: Load pre-trained models if specified.
     if config.logging.load_path:
         logger.info(f"Loading models from {config.logging.load_path}...")
@@ -198,6 +240,9 @@ def train(config: MainConfig) -> None:
         collected_steps_this_update = 0
         last_obs_for_bootstrap = None
 
+        # ##>: Track intrinsic rewards for logging.
+        intrinsic_rewards_this_update: list[float] = []
+
         for step in range(steps_per_env):
             if total_steps_overall >= config.training.total_timesteps:
                 break
@@ -205,17 +250,36 @@ def train(config: MainConfig) -> None:
             # ##>: Get actions, values, log probs for the batch of observations.
             actions, values, action_probs = agent.get_action(current_obs)
 
-            # ##>: Step the vectorized environment.
-            next_obs_batch, rewards_batch, terminated_batch, truncated_batch, _ = env.step(actions)
+            # ##>: Apply hybrid exploration (ε-greedy modification).
+            explored_actions = exploration_manager.apply_exploration(
+                action_logits=np.zeros((num_envs, agent.num_actions)),
+                sampled_actions=actions,
+            )
 
-            # ##>: Store transitions for the batch.
+            # ##>: Update UCB action counts.
+            exploration_manager.update_action_counts(explored_actions)
+
+            # ##>: Step the vectorized environment with explored actions.
+            next_obs_batch, rewards_batch, terminated_batch, truncated_batch, _ = env.step(explored_actions)
+
+            # ##>: Compute intrinsic rewards from RND if enabled.
+            total_rewards = rewards_batch.copy()
+            if rnd_module is not None:
+                intrinsic_rewards = rnd_module.compute_intrinsic_reward(next_obs_batch)
+                total_rewards = rewards_batch + config.rnd.intrinsic_reward_coef * intrinsic_rewards
+                intrinsic_rewards_this_update.extend(intrinsic_rewards.tolist())
+
+            # ##>: Store transitions for the batch with blended rewards.
             dones_batch = np.logical_or(terminated_batch, truncated_batch)
-            agent.store_transition(current_obs, actions, rewards_batch, values, dones_batch, action_probs)
+            agent.store_transition(current_obs, explored_actions, total_rewards, values, dones_batch, action_probs)
 
             # ##>: Update current observations.
             current_obs = next_obs_batch
 
-            # ##>: Update episode trackers for each environment.
+            # ##>: Update exploration manager step counter.
+            exploration_manager.step(num_envs)
+
+            # ##>: Update episode trackers for each environment (use extrinsic rewards for logging).
             episode_rewards += rewards_batch
             episode_lengths += 1
             total_steps_overall += num_envs
@@ -239,6 +303,9 @@ def train(config: MainConfig) -> None:
                     # ##>: Reset individual trackers.
                     episode_rewards[i] = 0
                     episode_lengths[i] = 0
+
+                    # ##>: Reset UCB counts for this environment on episode end.
+                    exploration_manager.reset_counts_for_env(i)
 
                     # ##>: Check curriculum advancement criteria.
                     if len(reward_deque) == reward_deque.maxlen:
@@ -289,11 +356,37 @@ def train(config: MainConfig) -> None:
             logger.info(
                 f"Performing learning update for cycle {update_cycle} with {collected_steps_this_update} steps..."
             )
+
+            # ##>: Train RND predictor network before buffer is cleared.
+            rnd_loss = 0.0
+            if rnd_module is not None:
+                collected_obs = agent.buffer.states[: agent.buffer.ptr]
+                if len(collected_obs) > 0:
+                    obs_flat = collected_obs.reshape(-1, *collected_obs.shape[2:])
+                    rnd_loss = rnd_module.train_step(obs_flat)
+
             metrics = agent.learn(last_state=last_obs_for_bootstrap, steps_collected=collected_steps_this_update)
+
+            # ##>: Update adaptive entropy coefficient based on current entropy level.
+            current_entropy = metrics["entropy"]
+            base_entropy_coef = exploration_manager.update_entropy_coef(current_entropy)
+
+            # ##>: Apply stage-specific entropy multiplier (only to base, not cumulative).
+            stage_entropy_multiplier = current_stage["entropy_multiplier"]
+            agent.entropy_coef = base_entropy_coef * stage_entropy_multiplier
+
+            # ##>: Log with exploration metrics.
+            exploration_stats = exploration_manager.get_stats()
+            mean_intrinsic = np.mean(intrinsic_rewards_this_update) if intrinsic_rewards_this_update else 0.0
+
             logger.info(
                 f"Update complete | Policy Loss: {metrics['policy_loss']:.4f} | "
                 f"Value Loss: {metrics['value_loss']:.4f} | Entropy: {metrics['entropy']:.4f} | "
                 f"Clip Fraction: {metrics['clip_fraction']:.3f} | KL: {metrics['approx_kl']:.4f}"
+            )
+            logger.info(
+                f"Exploration | RND Loss: {rnd_loss:.4f} | Mean Intrinsic: {mean_intrinsic:.4f} | "
+                f"Epsilon: {exploration_stats['epsilon']:.3f} | Entropy Coef: {agent.entropy_coef:.4f}"
             )
         else:
             logger.info(f"Skipping learning update for cycle {update_cycle} as no steps were collected.")

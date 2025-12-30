@@ -41,6 +41,39 @@ class PPOConfig(BaseModel):
         return v
 
 
+class RNDConfig(BaseModel):
+    """Configuration for Random Network Distillation (intrinsic motivation)."""
+
+    enabled: bool = True
+    feature_dim: int = 512
+    learning_rate: float = 1e-4
+    intrinsic_reward_scale: float = 1.0
+    update_proportion: float = 0.25
+    # ##>: Coefficient for blending intrinsic + extrinsic rewards.
+    intrinsic_reward_coef: float = 0.5
+
+
+class ExplorationConfig(BaseModel):
+    """Configuration for hybrid exploration strategies."""
+
+    # ##>: ε-greedy parameters.
+    use_epsilon_greedy: bool = True
+    epsilon_start: float = 0.3
+    epsilon_end: float = 0.01
+    epsilon_decay_steps: int = 500_000
+
+    # ##>: UCB parameters.
+    use_ucb: bool = True
+    ucb_coefficient: float = 0.5
+
+    # ##>: Adaptive entropy parameters.
+    use_adaptive_entropy: bool = True
+    target_entropy_ratio: float = 0.5
+    entropy_lr: float = 0.01
+    min_entropy_coef: float = 0.001
+    max_entropy_coef: float = 0.1
+
+
 class TrainingConfig(BaseModel):
     """Configuration for the training process."""
 
@@ -64,4 +97,6 @@ class MainConfig(BaseModel):
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
     training: TrainingConfig = Field(default_factory=TrainingConfig)
     ppo: PPOConfig = Field(default_factory=PPOConfig)
+    rnd: RNDConfig = Field(default_factory=RNDConfig)
+    exploration: ExplorationConfig = Field(default_factory=ExplorationConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)

@@ -21,6 +21,34 @@ ppo:
   use_lr_annealing: true # Linear decay to 0
   use_value_clipping: false # Can hurt performance per ablations
 
+# Random Network Distillation for intrinsic motivation
+rnd:
+  enabled: true
+  feature_dim: 512
+  learning_rate: 1e-4
+  intrinsic_reward_scale: 1.0
+  update_proportion: 0.25
+  intrinsic_reward_coef: 0.5 # Blend: r_total = r_ext + coef * r_int
+
+# Hybrid exploration strategies
+exploration:
+  # ε-greedy: Random action with decaying probability
+  use_epsilon_greedy: true
+  epsilon_start: 0.3
+  epsilon_end: 0.01
+  epsilon_decay_steps: 500000
+
+  # UCB: Exploration bonus for infrequent actions
+  use_ucb: true
+  ucb_coefficient: 0.5
+
+  # Adaptive entropy: Auto-tune entropy coefficient
+  use_adaptive_entropy: true
+  target_entropy_ratio: 0.5 # Target as fraction of max entropy
+  entropy_lr: 0.01
+  min_entropy_coef: 0.001
+  max_entropy_coef: 0.1
+
 logging:
   log_interval: 1
   save_interval: 10
