@@ -225,6 +225,39 @@ class RainbowAgent(BaseAgent):
         if not self.use_noisy:
             self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
+    def store_transitions_batch(
+        self,
+        states: np.ndarray,
+        actions: np.ndarray,
+        rewards: np.ndarray,
+        next_states: np.ndarray,
+        dones: np.ndarray,
+    ) -> None:
+        """
+        Store a batch of transitions from vectorized environments.
+
+        More efficient than calling store_transition in a loop.
+
+        Parameters
+        ----------
+        states : np.ndarray
+            Batch of observations, shape (num_envs, *obs_shape).
+        actions : np.ndarray
+            Batch of actions, shape (num_envs,).
+        rewards : np.ndarray
+            Batch of rewards, shape (num_envs,).
+        next_states : np.ndarray
+            Batch of next observations, shape (num_envs, *obs_shape).
+        dones : np.ndarray
+            Batch of done flags, shape (num_envs,).
+        """
+        self.buffer.store_batch(states, actions, rewards, next_states, dones)
+        self.total_steps += len(states)
+
+        # ##>: Decay epsilon for non-noisy networks.
+        if not self.use_noisy:
+            self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+
     def learn(self, **kwargs: Any) -> dict[str, float]:
         """
         Perform one training step if conditions are met.

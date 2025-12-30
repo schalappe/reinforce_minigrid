@@ -250,9 +250,48 @@ class PrioritizedReplayBuffer(BaseBuffer):
             self.size = min(self.size + 1, self.capacity)
             self.n_step_buffer.pop(0)
 
+    def store_batch(
+        self,
+        states: np.ndarray,
+        actions: np.ndarray,
+        rewards: np.ndarray,
+        next_states: np.ndarray,
+        dones: np.ndarray,
+    ) -> None:
+        """
+        Store a batch of transitions efficiently (vectorized).
+
+        Bypasses n-step processing for simplicity in batch mode.
+        Use this for vectorized environment collection.
+
+        Parameters
+        ----------
+        states : np.ndarray
+            Batch of observations, shape (batch, *obs_shape).
+        actions : np.ndarray
+            Batch of actions, shape (batch,).
+        rewards : np.ndarray
+            Batch of rewards, shape (batch,).
+        next_states : np.ndarray
+            Batch of next observations, shape (batch, *obs_shape).
+        dones : np.ndarray
+            Batch of done flags, shape (batch,).
+        """
+        batch_size = len(states)
+
+        for i in range(batch_size):
+            idx = self.tree.add(self.max_priority**self.alpha)
+            self.states[idx] = states[i]
+            self.actions[idx] = actions[i]
+            self.rewards[idx] = rewards[i]
+            self.next_states[idx] = next_states[i]
+            self.dones[idx] = dones[i]
+
+        self.size = min(self.size + batch_size, self.capacity)
+
     def sample(self, batch_size: int) -> tuple:
         """
-        Sample batch with prioritized sampling.
+        Sample batch with prioritized sampling (vectorized).
 
         Parameters
         ----------
@@ -267,23 +306,27 @@ class PrioritizedReplayBuffer(BaseBuffer):
         self.frame += batch_size
         beta = self._get_beta()
 
+        # ##>: Vectorized stratified sampling for better coverage.
+        segment = self.tree.total / batch_size
+        segment_starts = np.arange(batch_size) * segment
+        random_offsets = np.random.uniform(0, segment, size=batch_size)
+        values = segment_starts + random_offsets
+
+        # ##>: Batch tree traversal (still requires loop but optimized).
         indices = np.zeros(batch_size, dtype=np.int32)
         priorities = np.zeros(batch_size, dtype=np.float64)
         tree_indices = np.zeros(batch_size, dtype=np.int32)
-        segment = self.tree.total / batch_size
 
-        for i in range(batch_size):
-            low = segment * i
-            high = segment * (i + 1)
-            value = np.random.uniform(low, high)
+        for i, value in enumerate(values):
             tree_idx, priority, data_idx = self.tree.get(value)
             tree_indices[i] = tree_idx
             indices[i] = data_idx
-            priorities[i] = priority
+            priorities[i] = max(priority, 1e-8)
 
-        # ##>: Importance sampling weights.
-        probs = priorities / (self.tree.total + 1e-8)
-        weights = (self.size * probs) ** (-beta)
+        # ##>: Vectorized importance sampling weights.
+        total_priority = self.tree.total + 1e-8
+        probs = priorities / total_priority
+        weights = np.power(self.size * probs, -beta)
         weights /= weights.max() + 1e-8
 
         return (

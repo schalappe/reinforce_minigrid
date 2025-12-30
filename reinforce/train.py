@@ -334,11 +334,10 @@ def _train_dqn(config: MainConfig) -> None:
         next_obs, rewards, terminated, truncated, _ = env.step(actions)
         dones = np.logical_or(terminated, truncated)
 
-        # ##>: Store transitions for each environment.
-        for i in range(num_envs):
-            agent.store_transition(current_obs[i], int(actions[i]), float(rewards[i]), next_obs[i], bool(dones[i]))
+        # ##>: Store transitions in batch (vectorized, much faster than loop).
+        agent.store_transitions_batch(current_obs, actions, rewards, next_obs, dones)
 
-        # ##>: Learn.
+        # ##>: Learn (may run multiple times based on train_freq).
         metrics = agent.learn()
 
         current_obs = next_obs

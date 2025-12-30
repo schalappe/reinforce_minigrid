@@ -211,9 +211,11 @@ class Buffer(BaseBuffer):
             (states_tensor, actions_tensor, action_probs_tensor, returns_tensor, advantages_tensor)
         )
 
-        # ##: Shuffle and batch the dataset.
+        # ##: Shuffle, batch, and prefetch for GPU efficiency.
         total_samples = self.ptr * self.num_envs
         dataset = dataset.shuffle(buffer_size=total_samples).batch(batch_size)
+        # ##>: Prefetch allows loading next batch while GPU trains on current batch.
+        dataset = dataset.prefetch(tf.data.AUTOTUNE)
 
         return dataset
 
