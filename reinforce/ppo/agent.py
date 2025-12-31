@@ -250,7 +250,7 @@ class PPOAgent(BaseAgent):
 
         for _ in range(self.epochs):
             for batch in dataset:
-                states, actions, old_action_probs, returns, advantages = batch
+                states, actions, old_action_probs, returns, advantages, old_values = batch
                 pi_loss, v_loss, ent_bonus, clip_frac, approx_kl = train_step(
                     states,
                     actions,
@@ -265,7 +265,7 @@ class PPOAgent(BaseAgent):
                     self.vf_coef,
                     self.entropy_coef,
                     self.max_grad_norm,
-                    old_values=None,
+                    old_values=old_values,
                     use_value_clipping=self.use_value_clipping,
                 )
 

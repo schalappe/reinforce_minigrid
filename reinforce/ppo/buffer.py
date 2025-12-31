@@ -157,7 +157,7 @@ class Buffer(BaseBuffer):
         Returns
         -------
         tuple
-            Tuple containing flattened arrays of states, actions, action_probs, returns, and advantages.
+            Tuple containing flattened arrays of states, actions, action_probs, returns, advantages, and values.
         """
         total_steps = self.ptr * self.num_envs
 
@@ -166,8 +166,9 @@ class Buffer(BaseBuffer):
         action_probs_flat = self.action_probs[: self.ptr].swapaxes(0, 1).reshape(total_steps)
         returns_flat = self.returns[: self.ptr].swapaxes(0, 1).reshape(total_steps)
         advantages_flat = self.advantages[: self.ptr].swapaxes(0, 1).reshape(total_steps)
+        values_flat = self.values[: self.ptr].swapaxes(0, 1).reshape(total_steps)
 
-        return states_flat, actions_flat, action_probs_flat, returns_flat, advantages_flat
+        return states_flat, actions_flat, action_probs_flat, returns_flat, advantages_flat, values_flat
 
     def get_batches(self, batch_size: int) -> tf.data.Dataset:
         """
@@ -181,7 +182,7 @@ class Buffer(BaseBuffer):
         Returns
         -------
         tf.data.Dataset
-            A TensorFlow Dataset yielding batches of (states, actions, action_probs, returns, advantages).
+            A TensorFlow Dataset yielding batches of (states, actions, action_probs, returns, advantages, values).
 
         Raises
         ------
@@ -192,26 +193,32 @@ class Buffer(BaseBuffer):
             raise ValueError("Advantages and returns must be computed before getting batches.")
         if self.ptr == 0:
             logger.warning("Attempting to get batches from an empty buffer.")
-            return tf.data.Dataset.from_tensor_slices(
-                (tf.zeros((0,) + self.obs_shape), tf.zeros(0, dtype=tf.int32), tf.zeros(0), tf.zeros(0), tf.zeros(0))
-            ).batch(batch_size)
+            return tf.data.Dataset.from_tensor_slices((
+                tf.zeros((0,) + self.obs_shape),
+                tf.zeros(0, dtype=tf.int32),
+                tf.zeros(0),
+                tf.zeros(0),
+                tf.zeros(0),
+                tf.zeros(0),
+            )).batch(batch_size)
 
-        # ##: Flatten data across environments and steps.
-        states_f, actions_f, action_probs_f, returns_f, advantages_f = self._flatten_buffer()
+        # ##>: Flatten data across environments and steps.
+        states_f, actions_f, action_probs_f, returns_f, advantages_f, values_f = self._flatten_buffer()
 
-        # ##: Convert flattened numpy arrays to tensors.
+        # ##>: Convert flattened numpy arrays to tensors.
         states_tensor = tf.convert_to_tensor(states_f, dtype=tf.float32)
         actions_tensor = tf.convert_to_tensor(actions_f, dtype=tf.int32)
         action_probs_tensor = tf.convert_to_tensor(action_probs_f, dtype=tf.float32)
         returns_tensor = tf.convert_to_tensor(returns_f, dtype=tf.float32)
         advantages_tensor = tf.convert_to_tensor(advantages_f, dtype=tf.float32)
+        values_tensor = tf.convert_to_tensor(values_f, dtype=tf.float32)
 
-        # ##: Create dataset from flattened tensors.
+        # ##>: Create dataset from flattened tensors.
         dataset = tf.data.Dataset.from_tensor_slices(
-            (states_tensor, actions_tensor, action_probs_tensor, returns_tensor, advantages_tensor)
+            (states_tensor, actions_tensor, action_probs_tensor, returns_tensor, advantages_tensor, values_tensor)
         )
 
-        # ##: Shuffle, batch, and prefetch for GPU efficiency.
+        # ##>: Shuffle, batch, and prefetch for GPU efficiency.
         total_samples = self.ptr * self.num_envs
         dataset = dataset.shuffle(buffer_size=total_samples).batch(batch_size)
         # ##>: Prefetch allows loading next batch while GPU trains on current batch.
