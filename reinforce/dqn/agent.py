@@ -51,7 +51,11 @@ class RainbowAgent(BaseAgent):
     batch_size : int, optional
         Training batch size. Default is 32.
     target_update_freq : int, optional
-        Steps between target network updates. Default is 8_000.
+        Training updates between target network syncs (not environment steps).
+        Since training occurs every `train_freq` env steps, the effective
+        environment-step interval is `target_update_freq * train_freq`.
+        Example: target_update_freq=8000, train_freq=4 → 32,000 env steps.
+        Default is 8_000.
     learning_starts : int, optional
         Steps before training begins. Default is 20_000.
     train_freq : int, optional
