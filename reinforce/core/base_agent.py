@@ -93,6 +93,15 @@ class BaseAgent(ABC):
             Path prefix for model files.
         """
 
+    @property
+    def has_pending_n_step_transitions(self) -> bool:
+        """
+        Return True if agent has pending n-step transitions to flush.
+
+        Override in subclasses that use n-step buffering.
+        """
+        return False
+
     def on_episode_end(self) -> None:  # noqa: B027
         """
         Handle episode end events.

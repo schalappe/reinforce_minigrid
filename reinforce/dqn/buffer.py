@@ -169,6 +169,11 @@ class PrioritizedReplayBuffer(BaseBuffer):
         # ##>: Multi-step buffer (temporary storage).
         self.n_step_buffer: list[tuple] = []
 
+    @property
+    def has_pending_n_step_transitions(self) -> bool:
+        """Return True if n-step buffer has pending transitions to flush."""
+        return len(self.n_step_buffer) > 0
+
     def _get_beta(self) -> float:
         """Get current beta for importance sampling."""
         progress = min(1.0, self.frame / self.beta_frames)

@@ -353,7 +353,9 @@ def _train_dqn(config: MainConfig) -> None:
                 total_episodes += 1
                 episode_rewards[i] = 0
                 episode_lengths[i] = 0
-                agent.on_episode_end()
+                # ##>: Only flush n-step buffer if using single-transition storage (not batch mode).
+                if agent.has_pending_n_step_transitions:
+                    agent.on_episode_end()
 
         # ##>: Logging.
         if total_steps % (config.logging.log_interval * 1000) == 0 and len(reward_deque) > 0:

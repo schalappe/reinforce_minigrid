@@ -357,6 +357,11 @@ class RainbowAgent(BaseAgent):
         except (OSError, FileNotFoundError, tf.errors.OpError) as exc:
             logger.warning(f"Error loading models: {exc}")
 
+    @property
+    def has_pending_n_step_transitions(self) -> bool:
+        """Return True if buffer has pending n-step transitions."""
+        return self.buffer.has_pending_n_step_transitions
+
     def on_episode_end(self) -> None:
         """Handle episode end for buffer flushing."""
         self.buffer.flush_n_step_buffer()
