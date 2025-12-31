@@ -316,9 +316,16 @@ class RainbowAgent(BaseAgent):
             loss, td_errors = categorical_dqn_loss(q_dist, target_dist, actions, weights)
 
         gradients = tape.gradient(loss, self.online_network.trainable_variables)
+        trainable_vars = self.online_network.trainable_variables
+
+        # ##!: Fail fast if gradient/variable count mismatch (indicates broken computation graph).
+        assert len(gradients) == len(trainable_vars), (
+            f"Gradient count ({len(gradients)}) != trainable variables ({len(trainable_vars)})"
+        )
+
         # ##>: Clip gradients.
         gradients = [tf.clip_by_norm(g, 10.0) if g is not None else g for g in gradients]
-        self.optimizer.apply_gradients(zip(gradients, self.online_network.trainable_variables))
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars, strict=True))
 
         # ##>: Update priorities if using PER.
         if self.use_per:
