@@ -222,7 +222,7 @@ class ExplorationManager:
 
         return self.entropy_coef
 
-    def get_stage_entropy_coef(self, stage_index: int, num_stages: int = 4) -> float:
+    def get_stage_entropy_coef(self, stage_index: int) -> float:
         """
         Get recommended entropy coefficient based on curriculum stage.
 
@@ -232,8 +232,6 @@ class ExplorationManager:
         ----------
         stage_index : int
             Current curriculum stage index (0-based).
-        num_stages : int, optional
-            Total number of curriculum stages. Default is 4.
 
         Returns
         -------
