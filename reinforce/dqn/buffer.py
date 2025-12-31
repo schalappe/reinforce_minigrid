@@ -204,17 +204,19 @@ class PrioritizedReplayBuffer(BaseBuffer):
         if len(self.n_step_buffer) < self.n_step:
             return
 
-        # ##>: Compute n-step return and store.
+        # ##>: Compute n-step return and track terminal index.
         n_step_return = 0.0
+        terminal_idx = len(self.n_step_buffer) - 1
         for i, (_, _, r, _, d) in enumerate(self.n_step_buffer):
             n_step_return += (self.gamma**i) * r
             if d:
+                terminal_idx = i
                 break
 
         state_0 = self.n_step_buffer[0][0]
         action_0 = self.n_step_buffer[0][1]
-        next_state_n = self.n_step_buffer[-1][3]
-        done_n = self.n_step_buffer[-1][4]
+        next_state_n = self.n_step_buffer[terminal_idx][3]
+        done_n = self.n_step_buffer[terminal_idx][4]
 
         idx = self.tree.add(self.max_priority**self.alpha)
         self.states[idx] = state_0
@@ -229,16 +231,19 @@ class PrioritizedReplayBuffer(BaseBuffer):
     def flush_n_step_buffer(self) -> None:
         """Flush remaining transitions in n-step buffer (call on episode end)."""
         while len(self.n_step_buffer) > 0:
+            # ##>: Compute n-step return and track terminal index.
             n_step_return = 0.0
+            terminal_idx = len(self.n_step_buffer) - 1
             for i, (_, _, r, _, d) in enumerate(self.n_step_buffer):
                 n_step_return += (self.gamma**i) * r
                 if d:
+                    terminal_idx = i
                     break
 
             state_0 = self.n_step_buffer[0][0]
             action_0 = self.n_step_buffer[0][1]
-            next_state_n = self.n_step_buffer[-1][3]
-            done_n = self.n_step_buffer[-1][4]
+            next_state_n = self.n_step_buffer[terminal_idx][3]
+            done_n = self.n_step_buffer[terminal_idx][4]
 
             idx = self.tree.add(self.max_priority**self.alpha)
             self.states[idx] = state_0
