@@ -193,14 +193,16 @@ class Buffer(BaseBuffer):
             raise ValueError("Advantages and returns must be computed before getting batches.")
         if self.ptr == 0:
             logger.warning("Attempting to get batches from an empty buffer.")
-            return tf.data.Dataset.from_tensor_slices((
-                tf.zeros((0,) + self.obs_shape),
-                tf.zeros(0, dtype=tf.int32),
-                tf.zeros(0),
-                tf.zeros(0),
-                tf.zeros(0),
-                tf.zeros(0),
-            )).batch(batch_size)
+            return tf.data.Dataset.from_tensor_slices(
+                (
+                    tf.zeros((0,) + self.obs_shape),
+                    tf.zeros(0, dtype=tf.int32),
+                    tf.zeros(0),
+                    tf.zeros(0),
+                    tf.zeros(0),
+                    tf.zeros(0),
+                )
+            ).batch(batch_size)
 
         # ##>: Flatten data across environments and steps.
         states_f, actions_f, action_probs_f, returns_f, advantages_f, values_f = self._flatten_buffer()

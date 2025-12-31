@@ -23,9 +23,7 @@ class TestNStepTerminalHandling:
         """Create a state filled with a specific value for easy identification."""
         return np.full((4, 4, 3), value, dtype=np.float32)
 
-    def test_nstep_uses_terminal_next_state_when_early_done(
-        self, buffer: PrioritizedReplayBuffer
-    ) -> None:
+    def test_nstep_uses_terminal_next_state_when_early_done(self, buffer: PrioritizedReplayBuffer) -> None:
         """
         When a terminal occurs before n_step, next_state should come from
         the terminal transition, not the last buffer element.
@@ -52,16 +50,13 @@ class TestNStepTerminalHandling:
         # ##>: Verify stored next_state is from terminal (t1), not last (t2).
         stored_next_state = buffer.next_states[0]
         assert np.allclose(stored_next_state, next_state_1), (
-            'next_state should be from terminal transition (value=11), '
-            f'got mean={stored_next_state.mean():.1f}'
+            f"next_state should be from terminal transition (value=11), got mean={stored_next_state.mean():.1f}"
         )
 
         # ##>: Verify done flag is True (from terminal).
         assert buffer.dones[0]
 
-    def test_nstep_uses_terminal_done_flag(
-        self, buffer: PrioritizedReplayBuffer
-    ) -> None:
+    def test_nstep_uses_terminal_done_flag(self, buffer: PrioritizedReplayBuffer) -> None:
         """
         When terminal occurs early, done flag should be True even if
         subsequent transitions have done=False.
@@ -75,9 +70,7 @@ class TestNStepTerminalHandling:
 
         assert buffer.dones[0]
 
-    def test_nstep_return_truncated_at_terminal(
-        self, buffer: PrioritizedReplayBuffer
-    ) -> None:
+    def test_nstep_return_truncated_at_terminal(self, buffer: PrioritizedReplayBuffer) -> None:
         """
         N-step return should only sum rewards up to and including terminal.
 
@@ -96,12 +89,10 @@ class TestNStepTerminalHandling:
         stored_reward = buffer.rewards[0]
 
         assert np.isclose(stored_reward, expected_return, atol=1e-5), (
-            f'Expected n-step return {expected_return:.4f}, got {stored_reward:.4f}'
+            f"Expected n-step return {expected_return:.4f}, got {stored_reward:.4f}"
         )
 
-    def test_nstep_no_terminal_uses_last_element(
-        self, buffer: PrioritizedReplayBuffer
-    ) -> None:
+    def test_nstep_no_terminal_uses_last_element(self, buffer: PrioritizedReplayBuffer) -> None:
         """
         When no terminal occurs, next_state should come from last element.
         """
@@ -116,8 +107,8 @@ class TestNStepTerminalHandling:
 
         stored_next_state = buffer.next_states[0]
         assert np.allclose(stored_next_state, next_state_2), (
-            'Without terminal, next_state should be from last element (value=12), '
-            f'got mean={stored_next_state.mean():.1f}'
+            "Without terminal, next_state should be from last element (value=12), "
+            f"got mean={stored_next_state.mean():.1f}"
         )
         assert not buffer.dones[0]
 
@@ -139,9 +130,7 @@ class TestFlushNStepBuffer:
         """Create a state filled with a specific value for easy identification."""
         return np.full((4, 4, 3), value, dtype=np.float32)
 
-    def test_flush_uses_terminal_next_state(
-        self, buffer: PrioritizedReplayBuffer
-    ) -> None:
+    def test_flush_uses_terminal_next_state(self, buffer: PrioritizedReplayBuffer) -> None:
         """
         Flush should use terminal's next_state when terminal occurs early.
         """
@@ -162,13 +151,10 @@ class TestFlushNStepBuffer:
         # ##>: First stored transition should use terminal's next_state.
         stored_next_state = buffer.next_states[0]
         assert np.allclose(stored_next_state, next_state_terminal), (
-            'Flushed next_state should be from terminal (value=11), '
-            f'got mean={stored_next_state.mean():.1f}'
+            f"Flushed next_state should be from terminal (value=11), got mean={stored_next_state.mean():.1f}"
         )
 
-    def test_flush_truncates_return_at_terminal(
-        self, buffer: PrioritizedReplayBuffer
-    ) -> None:
+    def test_flush_truncates_return_at_terminal(self, buffer: PrioritizedReplayBuffer) -> None:
         """
         Flush should truncate n-step return at terminal.
         """
