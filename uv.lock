@@ -743,7 +743,7 @@ dependencies = [
 dev = [
     { name = "pyrefly" },
     { name = "ruff" },
-    { name = "tensorflow-metal" },
+    { name = "tensorflow-metal", marker = "sys_platform == 'darwin'" },
 ]
 
 [package.metadata]
@@ -769,7 +769,7 @@ requires-dist = [
 dev = [
     { name = "pyrefly", specifier = ">=0.16.0" },
     { name = "ruff", specifier = ">=0.8.0" },
-    { name = "tensorflow-metal", specifier = ">=1.2.0" },
+    { name = "tensorflow-metal", marker = "sys_platform == 'darwin'", specifier = ">=1.2.0" },
 ]
 
 [[package]]

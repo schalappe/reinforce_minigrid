@@ -13,12 +13,10 @@ exploration incentives.
 from __future__ import annotations
 
 from collections import deque
-from typing import TYPE_CHECKING
 
 import numpy as np
 
-if TYPE_CHECKING:
-    from reinforce.config.training_config import ExplorationConfig
+from reinforce.config.training_config import ExplorationConfig
 
 
 class ExplorationManager:
