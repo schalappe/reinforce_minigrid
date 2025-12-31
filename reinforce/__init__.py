@@ -1,14 +1,23 @@
 """
 REINFORCE Agent Training Module.
 
-This module provides functionalities for training and evaluating a reinforcement learning agent using
-the REINFORCE algorithm within the MiniGrid environment. It includes logger setup and potentially
-other utilities related to the training process.
+This module provides functionalities for training and evaluating reinforcement learning agents using
+multiple algorithms within the MiniGrid environment.
 
-Functions
----------
-setup_logger()
-    Configures the Loguru logger for the module.
+Supported algorithms:
+- PPO (Proximal Policy Optimization) with curriculum learning and exploration enhancements
+- Rainbow DQN with six algorithmic improvements
+
+Subpackages
+-----------
+core
+    Shared base classes and utilities (BaseAgent, BaseBuffer, network_utils, schedules)
+ppo
+    PPO algorithm implementation (agent, buffer, network, rnd, exploration)
+dqn
+    Rainbow DQN implementation (agent, buffer, network, losses)
+config
+    Configuration management (Pydantic models, YAML loading)
 """
 
 import sys
@@ -22,11 +31,6 @@ def setup_logger():
 
     Sets up the Loguru logger with a specific format for console output (stderr).
     The default logging level is set to INFO.
-
-    Notes
-    -----
-    Removes any existing handlers before adding the new stderr handler to avoid duplicate logs.
-    The format includes timestamp, level, name, function, line number, and the message, with colorization enabled.
     """
     logger.remove()
     logger.add(

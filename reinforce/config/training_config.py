@@ -1,95 +1,142 @@
-"""
-Dataclass definitions for PPO training configuration.
-"""
+"""Pydantic models for training configuration supporting multiple RL algorithms."""
 
-from dataclasses import dataclass, field
+from enum import Enum
+
+from pydantic import BaseModel, Field, field_validator
 
 
-@dataclass
-class EnvironmentConfig:
-    """
-    Configuration related to the training environment.
+class Algorithm(str, Enum):
+    """Supported RL algorithms."""
 
-    Attributes
-    ----------
-    seed : int, optional
-        Random seed for reproducibility across environment and libraries. Default is 42.
-    """
+    PPO = "ppo"
+    DQN = "dqn"
+
+
+class EnvironmentConfig(BaseModel):
+    """Configuration for the training environment."""
 
     seed: int = 42
 
 
-@dataclass
-class PPOHyperparameters:
-    """
-    Hyperparameters specific to the PPO algorithm.
+class PPOConfig(BaseModel):
+    """Hyperparameters for the PPO algorithm."""
 
-    Attributes
-    ----------
-    learning_rate : float, optional
-        Learning rate for the Adam optimizer. Default is 3e-4.
-    gamma : float, optional
-        Discount factor for future rewards. Default is 0.99.
-    lambda_gae : float, optional
-        Lambda parameter for Generalized Advantage Estimation (GAE). Default is 0.95.
-    clip_param : float, optional
-        Clipping parameter epsilon for the PPO surrogate objective. Default is 0.2.
-    entropy_coef : float, optional
-        Coefficient for the entropy bonus in the loss function. Default is 0.01.
-    value_coef : float, optional
-        Coefficient for the value function loss. Default is 0.5.
-    epochs : int, optional
-        Number of optimization epochs per learning update. Default is 10.
-    batch_size : int, optional
-        Mini-batch size for optimization. Default is 64.
-    """
-
-    learning_rate: float = 3e-4
+    learning_rate: float = 2.5e-4
     gamma: float = 0.99
-    lambda_gae: float = field(default=0.95, metadata={"yaml_name": "lambda"})
+    lambda_gae: float = Field(default=0.95, alias="lambda")
     clip_param: float = 0.2
     entropy_coef: float = 0.01
-    value_coef: float = field(default=0.5, metadata={"yaml_name": "vf_coef"})
-    epochs: int = 10
-    batch_size: int = 64
+    value_coef: float = Field(default=0.5, alias="vf_coef")
+    epochs: int = 4
+    batch_size: int = 256
+    max_grad_norm: float = 0.5
+    use_lr_annealing: bool = True
+    use_value_clipping: bool = False
+
+    model_config = {"populate_by_name": True}
+
+    @field_validator("learning_rate", "max_grad_norm")
+    @classmethod
+    def must_be_positive(cls, v: float, info) -> float:
+        if v <= 0:
+            raise ValueError(f"{info.field_name} must be positive")
+        return v
+
+    @field_validator("gamma", "lambda_gae")
+    @classmethod
+    def must_be_in_unit_interval(cls, v: float, info) -> float:
+        if not 0 < v <= 1:
+            raise ValueError(f"{info.field_name} must be in (0, 1]")
+        return v
 
 
-@dataclass
-class TrainingConfig:
-    """
-    Configuration for the overall training process.
+class DQNConfig(BaseModel):
+    """Hyperparameters for the Rainbow DQN algorithm."""
 
-    Attributes
-    ----------
-    total_timesteps : int, optional
-        Total number of environment steps to train for. Default is 1,000,000.
-    steps_per_update : int, optional
-        Number of steps collected from the environment before each agent learning update. Default is 2048.
-    num_envs : int, optional
-        Number of parallel environments to use for experience collection. Default is 4.
-    """
+    learning_rate: float = 6.25e-5
+    gamma: float = 0.99
+    # ##>: Multi-step learning parameters.
+    n_step: int = 3
+    # ##>: Categorical DQN (C51) parameters.
+    num_atoms: int = 51
+    v_min: float = -10.0
+    v_max: float = 10.0
+    # ##>: Replay buffer parameters.
+    buffer_size: int = 100_000
+    batch_size: int = 32
+    # ##>: Training schedule parameters.
+    target_update_freq: int = 8_000
+    learning_starts: int = 20_000
+    train_freq: int = 4
+    # ##>: Prioritized Experience Replay parameters.
+    priority_alpha: float = 0.6
+    priority_beta_start: float = 0.4
+    priority_beta_frames: int = 100_000
+    # ##>: Rainbow component toggles.
+    use_noisy: bool = True
+    use_dueling: bool = True
+    use_double: bool = True
+    use_per: bool = True
 
-    total_timesteps: int = 1_000_000
-    steps_per_update: int = 2048
-    num_envs: int = 4
+    model_config = {"populate_by_name": True}
+
+    @field_validator("learning_rate")
+    @classmethod
+    def lr_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("learning_rate must be positive")
+        return v
+
+    @field_validator("gamma")
+    @classmethod
+    def gamma_in_unit_interval(cls, v: float) -> float:
+        if not 0 < v <= 1:
+            raise ValueError("gamma must be in (0, 1]")
+        return v
 
 
-@dataclass
-class LoggingConfig:
-    """
-    Configuration related to logging and model saving.
+class RNDConfig(BaseModel):
+    """Configuration for Random Network Distillation (intrinsic motivation)."""
 
-    Attributes
-    ----------
-    log_interval : int, optional
-        Interval for logging training progress. Default is 1.
-    save_interval : int, optional
-        Interval for saving the model. Default is 10.
-    save_path : str, optional
-        Directory path for saving models. Default is 'models/ppo_maze'.
-    load_path : str, optional
-        Path prefix to load pre-trained models from. Default is None.
-    """
+    enabled: bool = True
+    feature_dim: int = 512
+    learning_rate: float = 1e-4
+    intrinsic_reward_scale: float = 1.0
+    update_proportion: float = 0.25
+    intrinsic_reward_coef: float = 0.5
+
+
+class ExplorationConfig(BaseModel):
+    """Configuration for hybrid exploration strategies."""
+
+    # ##>: Epsilon-greedy parameters.
+    use_epsilon_greedy: bool = True
+    epsilon_start: float = 0.3
+    epsilon_end: float = 0.01
+    epsilon_decay_steps: int = 500_000
+
+    # ##>: UCB parameters.
+    use_ucb: bool = True
+    ucb_coefficient: float = 0.5
+
+    # ##>: Adaptive entropy parameters.
+    use_adaptive_entropy: bool = True
+    target_entropy_ratio: float = 0.5
+    entropy_lr: float = 0.01
+    min_entropy_coef: float = 0.001
+    max_entropy_coef: float = 0.1
+
+
+class TrainingConfig(BaseModel):
+    """Configuration for the training process."""
+
+    total_timesteps: int = 3_000_000
+    steps_per_update: int = 128
+    num_envs: int = 8
+
+
+class LoggingConfig(BaseModel):
+    """Configuration for logging and model saving."""
 
     log_interval: int = 1
     save_interval: int = 10
@@ -97,29 +144,14 @@ class LoggingConfig:
     load_path: str | None = None
 
 
-@dataclass
-class MainConfig:
-    """
-    Root configuration class aggregating all sub-configurations.
+class MainConfig(BaseModel):
+    """Root configuration aggregating all sub-configurations."""
 
-    Attributes
-    ----------
-    environment : EnvironmentConfig, optional
-        Configuration related to the environment. Default is an instance of EnvironmentConfig.
-    training : TrainingConfig, optional
-        Configuration related to the training process. Default is an instance of TrainingConfig.
-    ppo : PPOHyperparameters, optional
-        Configuration specific to the PPO algorithm. Default is an instance of PPOHyperparameters.
-    logging : LoggingConfig, optional
-        Configuration related to logging and model saving. Default is an instance of LoggingConfig.
-    """
-
-    environment: EnvironmentConfig = field(default_factory=EnvironmentConfig)
-    training: TrainingConfig = field(default_factory=TrainingConfig)
-    ppo: PPOHyperparameters = field(default_factory=PPOHyperparameters)
-    logging: LoggingConfig = field(default_factory=LoggingConfig)
-
-    def __post_init__(self):
-        """Perform validation after initialization."""
-        if self.ppo.learning_rate <= 0:
-            raise ValueError("Learning rate must be positive.")
+    algorithm: Algorithm = Algorithm.PPO
+    environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
+    training: TrainingConfig = Field(default_factory=TrainingConfig)
+    ppo: PPOConfig = Field(default_factory=PPOConfig)
+    dqn: DQNConfig = Field(default_factory=DQNConfig)
+    rnd: RNDConfig = Field(default_factory=RNDConfig)
+    exploration: ExplorationConfig = Field(default_factory=ExplorationConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)

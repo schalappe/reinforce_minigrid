@@ -4,7 +4,7 @@ Medium Maze Environment for MiniGrid Curriculum Learning.
 A more complex maze than EasyMaze, using the default 3x3 layout.
 """
 
-from .maze import Maze
+from maze.envs.maze import Maze
 
 
 class MediumMaze(Maze):

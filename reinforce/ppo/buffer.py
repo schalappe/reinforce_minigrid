@@ -1,22 +1,27 @@
 """
 Experience replay buffer for PPO, optimized for vectorized environments.
 
-Stores trajectories from multiple parallel environments and calculates advantages and
-returns using Generalized Advantage Estimation (GAE).
+Stores trajectories from multiple parallel environments and calculates advantages and returns using
+Generalized Advantage Estimation (GAE).
 """
+
+from typing import Any
 
 import numpy as np
 import tensorflow as tf
 from loguru import logger
 
+from reinforce.core.base_buffer import BaseBuffer
 
-class Buffer:
+
+class Buffer(BaseBuffer):
     """
     A buffer for storing trajectories from parallel environments and calculating GAE.
 
-    This buffer uses pre-allocated NumPy arrays for efficiency when working with vectorized environments
-    It collects experiences (states, actions, rewards, etc.) from `num_envs` environments over
-    `steps_per_env` steps and computes the Generalized Advantage Estimation (GAE) and returns for PPO training.
+    This buffer uses pre-allocated NumPy arrays for efficiency when working with vectorized
+    environments. It collects experiences (states, actions, rewards, etc.) from `num_envs`
+    environments over `steps_per_env` steps and computes the Generalized Advantage Estimation (GAE)
+    and returns for PPO training.
     """
 
     def __init__(self, obs_shape: tuple, num_envs: int, steps_per_env: int, gamma: float = 0.99, lam: float = 0.95):
@@ -36,14 +41,14 @@ class Buffer:
         lam : float, optional
             GAE lambda parameter. Default is 0.95.
         """
-        self.obs_shape = obs_shape
+        capacity = num_envs * steps_per_env
+        super().__init__(obs_shape, capacity)
+
         self.num_envs = num_envs
         self.steps_per_env = steps_per_env
         self.gamma = gamma
         self.lam = lam
-
-        # ##: Calculate total buffer size.
-        self.buffer_size = self.num_envs * self.steps_per_env
+        self.buffer_size = capacity
 
         # ##: Pre-allocate NumPy arrays for efficiency.
         self.states = np.zeros((self.steps_per_env, self.num_envs) + self.obs_shape, dtype=np.float32)
@@ -58,7 +63,7 @@ class Buffer:
         self.ptr = 0
         self.trajectory_ready = False
 
-    def store(
+    def store(  # type: ignore[override]
         self,
         state: np.ndarray,
         action: np.ndarray,
@@ -66,7 +71,7 @@ class Buffer:
         value: np.ndarray,
         done: np.ndarray,
         action_prob: np.ndarray,
-    ):
+    ) -> None:
         """
         Store a batch of transitions from parallel environments at the current pointer position.
 
@@ -152,7 +157,7 @@ class Buffer:
         Returns
         -------
         tuple
-            Tuple containing flattened arrays of states, actions, action_probs, returns, and advantages.
+            Tuple containing flattened arrays of states, actions, action_probs, returns, advantages, and values.
         """
         total_steps = self.ptr * self.num_envs
 
@@ -161,8 +166,9 @@ class Buffer:
         action_probs_flat = self.action_probs[: self.ptr].swapaxes(0, 1).reshape(total_steps)
         returns_flat = self.returns[: self.ptr].swapaxes(0, 1).reshape(total_steps)
         advantages_flat = self.advantages[: self.ptr].swapaxes(0, 1).reshape(total_steps)
+        values_flat = self.values[: self.ptr].swapaxes(0, 1).reshape(total_steps)
 
-        return states_flat, actions_flat, action_probs_flat, returns_flat, advantages_flat
+        return states_flat, actions_flat, action_probs_flat, returns_flat, advantages_flat, values_flat
 
     def get_batches(self, batch_size: int) -> tf.data.Dataset:
         """
@@ -176,7 +182,7 @@ class Buffer:
         Returns
         -------
         tf.data.Dataset
-            A TensorFlow Dataset yielding batches of (states, actions, action_probs, returns, advantages).
+            A TensorFlow Dataset yielding batches of (states, actions, action_probs, returns, advantages, values).
 
         Raises
         ------
@@ -188,31 +194,64 @@ class Buffer:
         if self.ptr == 0:
             logger.warning("Attempting to get batches from an empty buffer.")
             return tf.data.Dataset.from_tensor_slices(
-                (tf.zeros((0,) + self.obs_shape), tf.zeros(0, dtype=tf.int32), tf.zeros(0), tf.zeros(0), tf.zeros(0))
+                (
+                    tf.zeros((0,) + self.obs_shape),
+                    tf.zeros(0, dtype=tf.int32),
+                    tf.zeros(0),
+                    tf.zeros(0),
+                    tf.zeros(0),
+                    tf.zeros(0),
+                )
             ).batch(batch_size)
 
-        # ##: Flatten data across environments and steps.
-        states_f, actions_f, action_probs_f, returns_f, advantages_f = self._flatten_buffer()
+        # ##>: Flatten data across environments and steps.
+        states_f, actions_f, action_probs_f, returns_f, advantages_f, values_f = self._flatten_buffer()
 
-        # ##: Convert flattened numpy arrays to tensors.
+        # ##>: Convert flattened numpy arrays to tensors.
         states_tensor = tf.convert_to_tensor(states_f, dtype=tf.float32)
         actions_tensor = tf.convert_to_tensor(actions_f, dtype=tf.int32)
         action_probs_tensor = tf.convert_to_tensor(action_probs_f, dtype=tf.float32)
         returns_tensor = tf.convert_to_tensor(returns_f, dtype=tf.float32)
         advantages_tensor = tf.convert_to_tensor(advantages_f, dtype=tf.float32)
+        values_tensor = tf.convert_to_tensor(values_f, dtype=tf.float32)
 
-        # ##: Create dataset from flattened tensors.
+        # ##>: Create dataset from flattened tensors.
         dataset = tf.data.Dataset.from_tensor_slices(
-            (states_tensor, actions_tensor, action_probs_tensor, returns_tensor, advantages_tensor)
+            (states_tensor, actions_tensor, action_probs_tensor, returns_tensor, advantages_tensor, values_tensor)
         )
 
-        # ##: Shuffle and batch the dataset.
+        # ##>: Shuffle, batch, and prefetch for GPU efficiency.
         total_samples = self.ptr * self.num_envs
         dataset = dataset.shuffle(buffer_size=total_samples).batch(batch_size)
+        # ##>: Prefetch allows loading next batch while GPU trains on current batch.
+        dataset = dataset.prefetch(tf.data.AUTOTUNE)
 
         return dataset
 
-    def clear(self):
+    def clear(self) -> None:
         """Resets the buffer pointer and trajectory ready flag."""
         self.ptr = 0
         self.trajectory_ready = False
+
+    def sample(self, batch_size: int) -> tuple[Any, ...]:
+        """
+        Sample a batch from the buffer.
+
+        For PPO, use get_batches() instead since PPO uses all data with shuffling.
+        This method is provided for interface compatibility.
+
+        Parameters
+        ----------
+        batch_size : int
+            Not used in PPO buffer.
+
+        Returns
+        -------
+        tuple
+            Flattened buffer contents.
+        """
+        return self._flatten_buffer()
+
+    def __len__(self) -> int:
+        """Return current number of stored transitions."""
+        return self.ptr * self.num_envs

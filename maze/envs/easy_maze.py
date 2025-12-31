@@ -4,7 +4,7 @@ Easy Maze Environment for MiniGrid Curriculum Learning.
 A slightly larger maze than BaseMaze, still relatively simple.
 """
 
-from .maze import Maze
+from maze.envs.maze import Maze
 
 
 class EasyMaze(Maze):

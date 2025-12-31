@@ -7,7 +7,7 @@ license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "tensorflow>=2.19.0",
+    "tensorflow>=2.18.0,<2.19.0",
     "minigrid==3.0.0",
     "rich>=13.3.3",
     "tqdm>=4.65.0",
@@ -19,14 +19,16 @@ dependencies = [
     "keras>=3.9.1",
     "loguru>=0.7.3",
     "tensorflow-probability[tf]>=0.25.0",
+    "click>=8.1.0",
+    "pydantic-settings>=2.7.0",
+    "pyrefly>=0.46.1",
 ]
 
 [dependency-groups]
 dev = [
     "ruff>=0.8.0",
     "pyrefly>=0.16.0",
-    # ##>: tensorflow-metal only available on macOS ARM64 with Python 3.10-3.12.
-    "tensorflow-metal>=1.2.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "tensorflow-metal>=1.2.0; sys_platform == 'darwin'",
 ]
 
 [tool.ruff]

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Manual Control Script for MiniGrid Maze Environment.
 
