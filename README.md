@@ -2,110 +2,106 @@
 
 # Reinforce MiniGrid Maze
 
-This project implements a reinforcement learning agent using Proximal Policy Optimization (PPO) to solve custom maze environments built upon the [MiniGrid](https://github.com/Farama-Foundation/Minigrid) framework. The agent learns to navigate increasingly complex mazes through a curriculum learning approach.
+A reinforcement learning project implementing multiple algorithms to solve custom maze environments built on the [MiniGrid](https://github.com/Farama-Foundation/Minigrid) framework. Agents learn to navigate increasingly complex mazes through curriculum learning.
 
-This work is inspired by the concepts and environments found in [MiniGrid](https://github.com/Farama-Foundation/Minigrid) and [BabyAI](https://github.com/mila-iqia/babyai).
+**Implemented Algorithms:**
+- **PPO** (Proximal Policy Optimization) with RND intrinsic motivation and hybrid exploration
+- **Rainbow DQN** with all six enhancements (Dueling, Double DQN, PER, N-step, Noisy Networks, C51)
+
+Inspired by [MiniGrid](https://github.com/Farama-Foundation/Minigrid) and [BabyAI](https://github.com/mila-iqia/babyai).
 
 ## Features
 
-*   **Custom Maze Environments:** Includes several maze environments (`BaseMaze`, `EasyMaze`, `MediumMaze`, `HardMaze`) with varying difficulties located in the `maze/` directory.
-*   **PPO Agent:** A PPO agent implemented using TensorFlow/Keras, located in the `reinforce/` directory.
-    *   Actor-Critic architecture with CNN + LSTM layers (`reinforce/network.py`).
-    *   Generalized Advantage Estimation (GAE) buffer (`reinforce/buffer.py`).
-    *   Core PPO algorithm logic (`reinforce/ppo.py`).
-*   **Curriculum Learning:** The training script (`reinforce/train.py`) employs a curriculum strategy, starting with simpler mazes and progressing to harder ones based on agent performance.
-*   **Configuration:** Training parameters are managed via YAML configuration files (see `configs/default_training.yaml`).
-*   **Training & Evaluation:**
-    *   Train the agent using `make train`.
-    *   Visualize a trained agent's performance and save it as a GIF using `make visualize` (`reinforce/visualize.py`).
-*   **Manual Control:** Interactively control the agent in the environment using `make manual` (`manual.py`).
-*   **Project Management:** A `Makefile` provides convenient commands for installation, training, visualization, linting, formatting, and cleaning.
+*   **Multi-Algorithm Support:** Factory-based architecture supporting both PPO and Rainbow DQN
+*   **Custom Maze Environments:** Four difficulty levels (`BaseMaze`, `EasyMaze`, `MediumMaze`, `HardMaze`) with adaptive reward shaping
+*   **PPO Implementation:**
+    *   IMPALA CNN architecture with residual blocks
+    *   RND (Random Network Distillation) for intrinsic curiosity rewards
+    *   Hybrid exploration (ε-greedy + UCB action tracking + adaptive entropy)
+    *   GAE buffer with vectorized parallel environments
+*   **Rainbow DQN Implementation:**
+    *   Dueling architecture, Double Q-learning, Prioritized Experience Replay
+    *   N-step returns, Noisy Networks, Categorical DQN (C51)
+*   **Curriculum Learning:** Progressive difficulty (Base → Easy → Medium → Hard) based on performance thresholds
+*   **GPU Optimized:** Large batch sizes (PPO: 512, DQN: 256) with dataset prefetching for maximum GPU utilization
+*   **Configuration:** YAML-based config with Pydantic models and CLI overrides
 
 ## Project Structure
 
-```
+```bash
 .
-├── Makefile          # Convenience commands for project tasks
-├── manual.py         # Script for manual environment control
-├── poetry.lock       # Poetry lock file
-├── pyproject.toml    # Project metadata and dependencies (Poetry)
-├── README.md         # This file
-├── configs/          # Configuration files (e.g., training parameters)
-│   └── default_training.yaml
-├── maze/             # Custom MiniGrid maze environment definitions
-│   ├── __init__.py
-│   └── envs/
-│       ├── __init__.py
-│       ├── base_maze.py
-│       ├── easy_maze.py
-│       ├── hard_maze.py
-│       ├── maze.py
-│       └── medium_maze.py
-├── models/           # Directory for saving trained models (created during training)
-├── reinforce/        # PPO agent implementation and training logic
-│   ├── __init__.py
-│   ├── agent.py      # PPO Agent class
-│   ├── buffer.py     # Experience replay buffer (GAE)
-│   ├── network.py    # Actor-Critic network definition
-│   ├── ppo.py        # Core PPO algorithm functions
-│   ├── train.py      # Main training script with curriculum learning
-│   ├── visualize.py  # Script for evaluating and rendering agent performance
-│   └── config/       # Configuration loading utilities
-│       ├── __init__.py
-│       ├── config_loader.py
-│       └── training_config.py
-└── tests/            # Unit tests (optional)
-    ├── test_game.py
-    └── test_model.py
+├── Makefile               # Convenience commands (train, visualize, lint, format)
+├── manual.py              # Script for manual environment control
+├── pyproject.toml         # Project metadata and dependencies (uv)
+├── uv.lock                # uv lock file
+├── configs/               # Configuration files
+│   ├── default_training.yaml
+│   └── kaggle_training.yaml
+├── maze/                  # Custom MiniGrid maze environments
+│   └── envs/              # Base, Easy, Medium, Hard maze definitions
+├── models/                # Saved model checkpoints (created during training)
+└── reinforce/             # Multi-algorithm RL implementation
+    ├── core/              # Shared components (BaseAgent, BaseBuffer, schedules)
+    ├── ppo/               # PPO: agent, buffer, network, RND, exploration
+    ├── dqn/               # Rainbow DQN: agent, buffer, network, losses
+    ├── config/            # Pydantic config models + YAML loader
+    ├── factory.py         # Algorithm-agnostic agent creation
+    ├── train.py           # Unified training script with curriculum
+    └── visualize.py       # Evaluation and GIF rendering
 ```
 
 ## Installation
 
-This project uses [Poetry](https://python-poetry.org/) for dependency management.
+This project uses [uv](https://github.com/astral-sh/uv) for fast dependency management.
 
-1.  **Install Poetry:** Follow the instructions on the [Poetry website](https://python-poetry.org/docs/#installation).
-2.  **Install Dependencies:** Navigate to the project root directory and run:
+1.  **Install uv:** `curl -LsSf https://astral.sh/uv/install.sh | sh`
+2.  **Install Dependencies:**
     ```bash
     make install-deps
-    # or directly using poetry
-    # poetry install
+    # or: uv sync
     ```
 
 ## Usage
 
 ### Training
 
-To train the PPO agent using the default configuration and curriculum:
-
 ```bash
+# Train with PPO (default)
 make train
+make train-ppo TOTAL_TIMESTEPS=5000000 NUM_ENVS=8
+
+# Train with Rainbow DQN
+make train-dqn
+
+# Train with specific algorithm
+make train ALGORITHM=dqn
 ```
 
-You can override default parameters via the Makefile or command line arguments. See `reinforce/train.py --help` and the `Makefile` for details. Training progress is logged to the console, and models are saved periodically to the `models/` directory.
+Training progress is logged to the console. Models are saved periodically to `models/` with performance metrics.
 
 ### Visualization
 
-To visualize a trained agent's performance in a specific maze level (e.g., 'easy') and save it as a GIF:
-
 ```bash
-make visualize LEVEL=easy MODEL_PREFIX=./models/ppo_maze_final_ts<timestamp>_stage<stage_index>
+make visualize LEVEL=easy MODEL_PREFIX=./models/ppo_maze_final ALGORITHM=ppo
 ```
 
-Replace `<timestamp>` and `<stage_index>` with the appropriate values from your saved model filenames. The output GIF will be saved as `evaluation_render.gif` by default. See `reinforce/visualize.py --help` and the `Makefile` for more options.
+Generates `evaluation_render.gif` showing the trained agent's performance.
 
 ### Manual Control
 
-To manually control the agent in the `HardMaze` environment using keyboard inputs:
-
 ```bash
-make manual
+make manual  # Test environments with keyboard controls
 ```
-
-Run `python manual.py --action` to see the available keyboard controls.
 
 ### Configuration
 
-Training hyperparameters and settings can be modified in `configs/default_training.yaml` or by providing command-line overrides during training (see `make train` command and `reinforce/train.py`).
+Edit `configs/default_training.yaml` or use CLI overrides:
+
+```bash
+python -m reinforce.train --algorithm dqn --dqn-lr 1e-4 --num-envs 16
+```
+
+Key parameters: `total_timesteps`, `num_envs`, `learning_rate`, `gamma`, `batch_size`. See `reinforce/train.py --help` for all options.
 
 ## License
 
