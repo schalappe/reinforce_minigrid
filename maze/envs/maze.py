@@ -111,7 +111,7 @@ class Maze(RoomGridLevel):
         """
         # ##>: Normalize room count (2x2=4 rooms → 0.0, 3x3=9 rooms → 1.0).
         total_rooms = self.num_rows * self.num_cols
-        room_factor = min((total_rooms - 4) / 5, 1.0)
+        room_factor = max(0.0, min((total_rooms - 4) / 5, 1.0))
 
         # ##>: Closed doors increase complexity.
         door_factor = 0.0 if self.doors_open else 0.3
@@ -119,7 +119,7 @@ class Maze(RoomGridLevel):
         # ##>: Distractors add complexity.
         distractor_factor = min(self.num_dists / 10, 0.3)
 
-        return min(room_factor + door_factor + distractor_factor, 1.0)
+        return max(0.0, min(room_factor + door_factor + distractor_factor, 1.0))
 
     def reward(self) -> float:
         """
