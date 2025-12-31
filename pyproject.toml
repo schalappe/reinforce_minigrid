@@ -28,7 +28,7 @@ dependencies = [
 dev = [
     "ruff>=0.8.0",
     "pyrefly>=0.16.0",
-    "tensorflow-metal>=1.2.0",
+    "tensorflow-metal>=1.2.0; sys_platform == 'darwin'",
 ]
 
 [tool.ruff]
