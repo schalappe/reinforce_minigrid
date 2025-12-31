@@ -195,7 +195,7 @@ class RainbowAgent(BaseAgent):
 
         return actions, {"q_values": q_values.numpy()}
 
-    def store_transition(
+    def store_transition(  # type: ignore[override]
         self,
         state: np.ndarray,
         action: int,

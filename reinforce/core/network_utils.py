@@ -190,13 +190,14 @@ class NoisyDense(layers.Layer):
         sigma_value = self.sigma_init / np.sqrt(input_dim)
 
         # ##>: Mean weights (learnable).
-        self.w_mu = self.add_weight(
+        # ##&: add_weight is inherited from keras.layers.Layer (dynamic binding).
+        self.w_mu = self.add_weight(  # type: ignore[missing-attribute]
             name="w_mu",
             shape=(input_dim, self.units),
             initializer=initializers.RandomUniform(-mu_range, mu_range),
             trainable=True,
         )
-        self.w_sigma = self.add_weight(
+        self.w_sigma = self.add_weight(  # type: ignore[missing-attribute]
             name="w_sigma",
             shape=(input_dim, self.units),
             initializer=initializers.Constant(sigma_value),
@@ -204,13 +205,13 @@ class NoisyDense(layers.Layer):
         )
 
         if self.use_bias:
-            self.b_mu = self.add_weight(
+            self.b_mu = self.add_weight(  # type: ignore[missing-attribute]
                 name="b_mu",
                 shape=(self.units,),
                 initializer=initializers.RandomUniform(-mu_range, mu_range),
                 trainable=True,
             )
-            self.b_sigma = self.add_weight(
+            self.b_sigma = self.add_weight(  # type: ignore[missing-attribute]
                 name="b_sigma",
                 shape=(self.units,),
                 initializer=initializers.Constant(sigma_value),

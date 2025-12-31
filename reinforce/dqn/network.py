@@ -55,8 +55,8 @@ def build_rainbow_network(
     if use_dueling:
         # ##>: Value stream: V(s) distribution over atoms.
         if use_noisy:
-            value_hidden = NoisyDense(256, activation="relu", name="value_hidden")(features)
-            value_atoms = NoisyDense(num_atoms, name="value_atoms")(value_hidden)
+            value_hidden = NoisyDense(256, activation="relu", name="value_hidden")(features)  # type: ignore[not-callable]
+            value_atoms = NoisyDense(num_atoms, name="value_atoms")(value_hidden)  # type: ignore[not-callable]
         else:
             value_hidden = layers.Dense(
                 256,
@@ -72,8 +72,8 @@ def build_rainbow_network(
 
         # ##>: Advantage stream: A(s, a) distribution for each action.
         if use_noisy:
-            adv_hidden = NoisyDense(256, activation="relu", name="adv_hidden")(features)
-            adv_atoms_flat = NoisyDense(num_actions * num_atoms, name="adv_atoms")(adv_hidden)
+            adv_hidden = NoisyDense(256, activation="relu", name="adv_hidden")(features)  # type: ignore[not-callable]
+            adv_atoms_flat = NoisyDense(num_actions * num_atoms, name="adv_atoms")(adv_hidden)  # type: ignore[not-callable]
         else:
             adv_hidden = layers.Dense(
                 256,
@@ -97,8 +97,8 @@ def build_rainbow_network(
     else:
         # ##>: Standard Q-network without dueling.
         if use_noisy:
-            hidden = NoisyDense(512, activation="relu", name="hidden")(features)
-            q_atoms_flat = NoisyDense(num_actions * num_atoms, name="q_atoms")(hidden)
+            hidden = NoisyDense(512, activation="relu", name="hidden")(features)  # type: ignore[not-callable]
+            q_atoms_flat = NoisyDense(num_actions * num_atoms, name="q_atoms")(hidden)  # type: ignore[not-callable]
         else:
             hidden = layers.Dense(
                 512,

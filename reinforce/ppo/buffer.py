@@ -63,7 +63,7 @@ class Buffer(BaseBuffer):
         self.ptr = 0
         self.trajectory_ready = False
 
-    def store(
+    def store(  # type: ignore[override]
         self,
         state: np.ndarray,
         action: np.ndarray,
@@ -71,7 +71,7 @@ class Buffer(BaseBuffer):
         value: np.ndarray,
         done: np.ndarray,
         action_prob: np.ndarray,
-    ):
+    ) -> None:
         """
         Store a batch of transitions from parallel environments at the current pointer position.
 

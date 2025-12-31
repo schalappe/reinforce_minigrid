@@ -152,7 +152,7 @@ def evaluate_and_render(
 
         # ##>: Step the environment.
         next_obs, reward, terminated, truncated, _ = env.step(action)
-        total_reward += reward
+        total_reward += float(reward)
 
         current_obs = next_obs
 

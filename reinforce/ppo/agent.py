@@ -165,7 +165,7 @@ class PPOAgent(BaseAgent):
 
         return action.numpy(), {"values": tf.squeeze(values).numpy(), "log_probs": action_prob.numpy()}
 
-    def store_transition(
+    def store_transition(  # type: ignore[override]
         self,
         state: np.ndarray,
         action: np.ndarray,

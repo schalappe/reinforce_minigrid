@@ -179,7 +179,7 @@ class PrioritizedReplayBuffer(BaseBuffer):
         progress = min(1.0, self.frame / self.beta_frames)
         return self.beta_start + progress * (self.beta_end - self.beta_start)
 
-    def store(
+    def store(  # type: ignore[override]
         self,
         state: np.ndarray,
         action: int,
