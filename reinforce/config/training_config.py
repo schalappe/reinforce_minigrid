@@ -77,8 +77,6 @@ class DQNConfig(BaseModel):
     use_dueling: bool = True
     use_double: bool = True
     use_per: bool = True
-    use_multistep: bool = True
-    use_categorical: bool = True
 
     model_config = {"populate_by_name": True}
 

@@ -47,8 +47,6 @@ dqn:
   use_dueling: true
   use_double: true
   use_per: true
-  use_multistep: true
-  use_categorical: true
 
 # RND for intrinsic motivation (PPO only)
 rnd:
