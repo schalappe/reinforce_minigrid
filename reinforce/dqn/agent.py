@@ -352,20 +352,11 @@ class RainbowAgent(BaseAgent):
         target_path = Path(f"{path_prefix}_target.keras")
 
         try:
-            self.online_network = tf.keras.models.load_model(
-                online_path,
-                custom_objects={
-                    "NoisyDense": __import__("reinforce.core.network_utils", fromlist=["NoisyDense"]).NoisyDense
-                },
-            )
-            self.target_network = tf.keras.models.load_model(
-                target_path,
-                custom_objects={
-                    "NoisyDense": __import__("reinforce.core.network_utils", fromlist=["NoisyDense"]).NoisyDense
-                },
-            )
+            # ##>: Load weights only to avoid Lambda layer deserialization issues.
+            self.online_network.load_weights(online_path)
+            self.target_network.load_weights(target_path)
             logger.info(f"Rainbow models loaded from {path_prefix}_*.keras")
-        except (OSError, FileNotFoundError, tf.errors.OpError) as exc:
+        except (OSError, FileNotFoundError, tf.errors.OpError, ValueError) as exc:
             logger.warning(f"Error loading models: {exc}")
 
     @property
